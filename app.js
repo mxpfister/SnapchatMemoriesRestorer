@@ -9,6 +9,7 @@ let jsonFile = null;
 let mediaFiles = [];
 let statusLog = [];
 let isScanning = false;
+let isAborted = false;
 
 // DOM Elements
 const folderZone = document.getElementById('folderZone');
@@ -250,6 +251,14 @@ function updateUI() {
  * Clear all data
  */
 function handleClear() {
+  isAborted = true; // Signal active runs to stop
+  if (ffmpegInstance) {
+    try {
+      ffmpegInstance.terminate(); // Force kill running FFmpeg
+    } catch (e) {}
+    ffmpegInstance = null;
+  }
+
   jsonFile = null;
   mediaFiles = [];
   statusLog = [];
@@ -257,7 +266,9 @@ function handleClear() {
   folderList.classList.add('file-list--empty');
   statusBox.classList.remove('status-box--visible');
   progressSection.classList.remove('progress-section--visible');
+  processBtn.disabled = false;
   folderInput.value = '';
+  updateProgress(0, 1);
   updateUI();
 }
 
@@ -265,6 +276,7 @@ function handleClear() {
  * Process memories
  */
 async function handleProcess() {
+  isAborted = false;
   statusLog = [];
   progressSection.classList.add('progress-section--visible');
   processBtn.disabled = true;
@@ -390,16 +402,40 @@ async function handleProcess() {
 
       addLog(`✅ Fertig! Deine gespeicherte ZIP-Datei ist nun bereit.`, 'ok');
     } else {
-      const CHUNK_SIZE = 500;
-      let partNumber = 1;
-      const totalParts = Math.ceil(totalToProcess / CHUNK_SIZE);
+      const TARGET_CHUNK_BYTES = 2000 * 1000 * 1000; // 2 Gigabyte
+      const memoryChunks = [];
+      let currentChunk = [];
+      let currentChunkSize = 0;
+
+      for (const group of allGroups) {
+        const [mid, ObjectFiles] = group;
+        let size = ObjectFiles.main.file.size;
+        if (ObjectFiles.overlay) {
+          size += ObjectFiles.overlay.file.size;
+        }
+
+        if (currentChunkSize + size > TARGET_CHUNK_BYTES && currentChunk.length > 0) {
+          memoryChunks.push(currentChunk);
+          currentChunk = [];
+          currentChunkSize = 0;
+        }
+        
+        currentChunk.push(group);
+        currentChunkSize += size;
+      }
       
-      if (totalParts > 1) {
-        addLog(`📦 Zum Speicherschutz werden die Dateien in ${totalParts} kleinere ZIP-Pakete aufgeteilt.`, 'info');
+      if (currentChunk.length > 0) {
+        memoryChunks.push(currentChunk);
       }
 
-      for (let i = 0; i < totalToProcess; i += CHUNK_SIZE) {
-        const chunk = allGroups.slice(i, i + CHUNK_SIZE);
+      const totalParts = memoryChunks.length;
+      let partNumber = 1;
+      
+      if (totalParts > 1) {
+        addLog(`📦 Zum Speicherschutz werden die Dateien in ${totalParts} kleinere ZIP-Pakete (max. ~2GB) aufgeteilt.`, 'info');
+      }
+
+      for (const chunk of memoryChunks) {
         const chunkZip = new JSZip();
         
         const cImages = chunk.filter(([_, f]) => IMAGE_EXTENSIONS.has(f.main.info.ext.toLowerCase()));
@@ -448,16 +484,24 @@ async function handleProcess() {
     }
 
   } catch (e) {
-    addLog(`❌ Kritischer Fehler: ${e.message}`, 'error');
-    console.error(e);
+    if (e.message && e.message.includes('Vorgang abgebrochen')) {
+      addLog(`⚠️ Der Prozess wurde durch den Benutzer abgebrochen.`, 'warn');
+    } else {
+      addLog(`❌ Kritischer Fehler: ${e.message}`, 'error');
+      console.error(e);
+    }
   } finally {
     if (ffmpegInstance) {
       try {
         await ffmpegInstance.terminate();
       } catch (err) {}
-      console.error(err)
       ffmpegInstance = null;
     }
+    
+    if (!isAborted) {
+      try { await clearCache(); } catch(e) {}
+    }
+    
     processBtn.disabled = false;
   }
 }
@@ -654,6 +698,16 @@ async function dataUrlToArrayBuffer(dataUrl) {
  * Process media files (Overlay & EXIF data)
  */
 async function processMediaGroup(files, meta) {
+  const mid = files.main.info.mid;
+  try {
+    const cached = await getFromCache(mid);
+    if (cached) {
+      return cached;
+    }
+  } catch (e) {
+    console.error(`Cache-Fehler für ${mid}:`, e);
+  }
+
   const mainFile = files.main.file;
   const overlayFile = files.overlay ? files.overlay.file : null;
   const ext = mainFile.name.split('.').pop().toLowerCase();
@@ -672,7 +726,9 @@ async function processMediaGroup(files, meta) {
       addLog(`⚠️ ${mainFile.name}: ${err.message}. Original wird beibehalten.`, 'error');
       console.error(`Fehler bei ${mainFile.name}:`, err);
     }
-    return await currentFile.arrayBuffer();
+    const finalBuffer = await currentFile.arrayBuffer();
+    try { await saveToCache(mid, finalBuffer); } catch(e) {}
+    return finalBuffer;
   }
 
   // Für Fotos mit Overlay verwenden wir Canvas
@@ -682,10 +738,14 @@ async function processMediaGroup(files, meta) {
 
   // Für Fotos Metadaten injizieren
   if (!isVideo && IMAGE_EXTENSIONS.has(ext)) {
-    return await applyPiexif(currentFile, meta, needDate, needLoc, date);
+    const finalBuffer = await applyPiexif(currentFile, meta, needDate, needLoc, date);
+    try { await saveToCache(mid, finalBuffer); } catch(e) {}
+    return finalBuffer;
   }
 
-  return await currentFile.arrayBuffer();
+  const finalBuffer = await currentFile.arrayBuffer();
+  try { await saveToCache(mid, finalBuffer); } catch(e) {}
+  return finalBuffer;
 }
 
 /**
@@ -836,14 +896,17 @@ async function processAndZip(mid, files, zip, history) {
   const meta = history[mid];
   const mainFile = files.main;
   
+  let processedFile = null;
   try {
-    const processedFile = await processMediaGroup(files, meta);
+    processedFile = await processMediaGroup(files, meta);
     const filename = `${mainFile.info.prefix}_${mid}.${mainFile.info.ext}`;
-    zip.file(filename, processedFile, { compression: "STORE" }); // Quick Win: Kein Re-Compress
+    zip.file(filename, processedFile, { compression: "STORE" });
   } catch (e) {
     addLog(`❌ Fehler bei ${mainFile.file.name}: ${e.message}`, 'error');
   } finally {
     processedFile = null;
+    if (files.main.file) files.main.file = null; // Rohe Referenz löschen
+    if (files.overlay && files.overlay.file) files.overlay.file = null; 
   }
 }
 
@@ -852,6 +915,8 @@ async function asyncPool(iterable, iteratorFn, concurrencyLimit) {
   const executing = new Set();
 
   for (const item of iterable) {
+    if (isAborted) throw new Error('Vorgang abgebrochen.');
+
     const p = Promise.resolve().then(() => iteratorFn(item));
     result.push(p);
     executing.add(p);
@@ -916,6 +981,53 @@ function escapeHtml(text) {
     "'": '&#039;',
   };
   return text.replace(/[&<>"']/g, (m) => map[m]);
+}
+
+// 2. Absturz-Sicherung per IndexedDB für verarbeitete Dateien
+const dbName = 'MemoriesRestorerDB';
+const storeName = 'processedFiles';
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(dbName, 1);
+    request.onupgradeneeded = (e) => {
+      e.target.result.createObjectStore(storeName);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveToCache(mid, buffer) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+    store.put(buffer, mid);
+    tx.oncomplete = resolve;
+    tx.onerror = reject;
+  });
+}
+
+async function getFromCache(mid) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readonly');
+    const store = tx.objectStore(storeName);
+    const req = store.get(mid);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = reject;
+  });
+}
+
+async function clearCache() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    tx.objectStore(storeName).clear();
+    tx.oncomplete = resolve;
+    tx.onerror = reject;
+  });
 }
 
 // Initialize on DOMContentLoaded
