@@ -4,6 +4,192 @@ const OVERLAY_RE = /^(?<prefix>\d{4}-\d{2}-\d{2})_(?<mid>[a-fA-F0-9-]{36})-overl
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'heic', 'heif', 'webp']);
 const VIDEO_EXTENSIONS = new Set(['mp4', 'mov', 'm4v', 'avi', 'mkv', 'webm']);
 
+const i18n = {
+  en: {
+    // UI Labels
+    readingFiles: 'Reading {count} files...',
+    scanningDir: 'Scanning directory...',
+    foundFiles: 'Found {count} files...',
+    analyzingFiles: 'Analyzing {count} files...',
+    
+    // Page Headings and Descriptions
+    pageTitle: 'Memories Restorer',
+    pageDescription: 'Export your Snapchat photos & videos with perfect metadata.',
+    localPrivate: 'Local & Private',
+    
+    // Why use this tool
+    whyUseTitle: 'Why do you need this tool?',
+    whyUseText: 'The official Snapchat export provides unfinished files: filters are separated from the image, and the recording date is missing. Without adjustment, your phone\'s file management is a mess. This tool automatically fixes everything:',
+    whyUsePoint1: 'Embed filters: Texts and stickers are permanently inserted into photos/videos.',
+    whyUsePoint2: 'Correct date: Original date & GPS are added. Your phone gallery sorts everything perfectly!',
+    whyUsePoint3: '100% Private: Processing runs entirely locally in your browser. Nothing is uploaded!',
+    
+    // How to get Snapchat export
+    howToGetTitle: 'How do I get my Snapchat export?',
+    howToGetText: 'In the <strong>Snapchat app</strong> go to your profile &rarr; <strong>Settings</strong> &rarr; <strong>My Data</strong>. Be sure to select <strong>"Export your Memories"</strong> and <strong>"Export JSON files"</strong> at the bottom! Swipe through the <em>entire time period</em> on the calendar and submit the request.',
+    
+    // Step 1
+    step1Title: '1. Select Snapchat folder',
+    step1Description: 'Select your complete, unzipped Snapchat export folder (e.g. <code>mydata~...</code>). The app automatically finds the <code>memories_history.json</code> and media files!',
+    selectFolder: 'Select export folder',
+    dragFolder: 'Click here or drag the entire folder in',
+    
+    // Step 2
+    step2Title: '2. Processing',
+    step2Description: 'Files are matched and metadata (date & GPS) are written to photos. You get a complete ZIP archive.',
+    reset: 'Reset',
+    startProcessing: 'Start processing',
+    
+    // Status messages
+    indexComplete: 'Index complete. Freeing index memory...',
+    found: 'Found: {images} images, {videos} videos.',
+    processing: 'Processing...',
+    processingImages: 'Processing images...',
+    processingVideos: 'Processing videos...',
+    processingImagesPart: 'Processing images (Part {part}/{total})...',
+    processingVideosPart: 'Processing videos (Part {part}/{total})...',
+    
+    // Download/Export
+    filePickerSet: 'Save location selected. Starting processing...',
+    fileSaved: 'Processing complete. Your saved ZIP file is ready.',
+    downloadingPart: 'Downloading ZIP part {part}...',
+    packingFiles: 'Now packing all finished files into a single ZIP archive. This may take a moment...',
+    allComplete: 'Done! All files processed and downloaded.',
+    streamingFiles: 'Saving finished files live & step-by-step to your file...',
+    chunking: 'For memory protection, files are being split into {parts} smaller ZIP packages (max. ~2.5GB).',
+    
+    // Warnings & Info
+    uploadHint: 'Note: Files are bundled at the end of processing.',
+    offlineHint: 'Note: Since the tool runs locally/offline, the download happens at the end of processing.',
+    browserHint: 'Note: Your browser downloads the entire ZIP file at once when everything is ready.',
+    mobileWarning: 'Mobile devices will crash',
+    mobileWarningText: 'Video processing with FFmpeg and caching many files will very likely cause a browser crash on smartphones. Please use this tool on a computer or laptop.',
+    browserWarning: 'Browser compatibility',
+    browserWarningText: 'Chrome and Edge are most stable here. Firefox and Safari support direct saving of large ZIP files only partially, so exports there require significantly more temporary RAM.',
+    
+    // Footer
+    privacy100: '🔒 100% Private & Local',
+    privacyDesc: 'Your files never leave your device. All processing happens in your browser. No data is uploaded to any server.',
+    privacyNote: 'When loading the page, IP addresses are technically processed by the hosting provider.',
+    disclaimer: 'Disclaimer',
+    disclaimerText: 'This project is not affiliated with Snapchat Inc., Snap Inc., or their products. It is an independent community tool for processing export files.',
+    
+    // Errors
+    criticalError: 'Critical error: {msg}',
+    abortedByUser: 'Process aborted by user.',
+    errorProcessing: 'Error processing {file}: {msg}',
+    jsonParseError: 'JSON Parse error: {msg}',
+    ffmpegBufferError: 'FFmpeg buffer error: {msg}',
+    ffmpegError: 'FFmpeg error code {code}',
+    corruptVideo: 'Video file is corrupted/unreadable',
+    processingVideo: 'Processing video {name} ({percent}%)',
+    
+    // Success messages
+    jsonParsed: '{count} entries parsed from JSON',
+    ffmpegReady: 'Video processing files buffered.',
+    jsonFound: 'memories_history.json found',
+    jsonMissing: 'memories_history.json missing',
+    mediaFound: 'media files found',
+  },
+  de: {
+    // UI Labels
+    readingFiles: 'Lese {count} Dateien ein...',
+    scanningDir: 'Scanne Verzeichnis...',
+    foundFiles: 'Gefunden {count} Dateien...',
+    analyzingFiles: 'Analysiere {count} Dateien...',
+    
+    // Page Headings and Descriptions
+    pageTitle: 'Memories Restorer',
+    pageDescription: 'Exportiere deine Snapchat Fotos & Videos originalgetreu.',
+    localPrivate: 'Lokal & Privat',
+    
+    // Why use this tool
+    whyUseTitle: 'Warum brauche ich dieses Tool?',
+    whyUseText: 'Der offizielle Snapchat-Export liefert unfertige Dateien: Filter sind vom Bild getrennt, und das Aufnahmedatum fehlt. Ohne Anpassung herrscht auf deinem Handy das reinste Datei-Chaos. Dieses Tool repariert alles vollautomatisch:',
+    whyUsePoint1: 'Filter einbacken: Texte und Sticker werden fest in Fotos/Videos eingefügt.',
+    whyUsePoint2: 'Korrektes Datum: Original-Datum & GPS werden ergänzt. Deine Handy-Galerie sortiert alles perfekt ein!',
+    whyUsePoint3: '100% Privat: Die Verarbeitung läuft rein lokal in deinem Browser. Nichts wird hochgeladen!',
+    
+    // How to get Snapchat export
+    howToGetTitle: 'Wie erhalte ich meinen Snapchat-Export?',
+    howToGetText: 'Gehe in der <strong>Snapchat App</strong> auf dein Profil &rarr; <strong>Einstellungen</strong> &rarr; <strong>Meine Daten</strong>. Wähle unten unbedingt <strong>"Deine Memorys exportieren"</strong> und <strong>"JSON-Dateien exportieren"</strong> aus! Streiche beim Kalender über den <em>gesamten Zeitraum</em> und sende die Anfrage ab.',
+    
+    // Step 1
+    step1Title: '1. Snapchat Ordner auswählen',
+    step1Description: 'Wähle deinen kompletten, entpackten Snapchat-Export-Ordner aus (z.B. <code>mydata~...</code>). Die App findet die <code>memories_history.json</code> und die Mediadateien ganz automatisch!',
+    selectFolder: 'Export-Ordner auswählen',
+    dragFolder: 'Klicke hier oder ziehe den gesamten Ordner hinein',
+    
+    // Step 2
+    step2Title: '2. Verarbeitung',
+    step2Description: 'Dateien werden abgeglichen und Metadaten (Datum & GPS) werden auf die Fotos geschrieben. Du erhältst ein vollständiges ZIP-Archiv.',
+    reset: 'Zurücksetzen',
+    startProcessing: 'Verarbeitung starten',
+    
+    // Status messages
+    indexComplete: 'Index abgeschlossen. Befreie Index-Speicher...',
+    found: 'Gefunden: {images} Bilder, {videos} Videos.',
+    processing: 'Verarbeitung läuft...',
+    processingImages: 'Verarbeite Bilder...',
+    processingVideos: 'Verarbeite Videos...',
+    processingImagesPart: 'Verarbeite Bilder (Paket {part}/{total})...',
+    processingVideosPart: 'Verarbeite Videos (Paket {part}/{total})...',
+    
+    // Download/Export
+    filePickerSet: 'Speicherort festgelegt. Starte Verarbeitung...',
+    fileSaved: 'Verarbeitung fertig. Deine gespeicherte ZIP-Datei ist nun bereit.',
+    downloadingPart: 'Lade ZIP-Teil {part} herunter...',
+    packingFiles: 'Packe nun alle fertigen Dateien in ein einzelnes ZIP-Archiv. Das kann kurz dauern...',
+    allComplete: 'Fertig! Alle Dateien verarbeitet und heruntergeladen.',
+    streamingFiles: 'Speichere fertige Dateien live & Schritt-für-Schritt in deine Datei...',
+    chunking: 'Zum Speicherschutz werden die Dateien in {parts} kleinere ZIP-Pakete (max. ~2.5GB) aufgeteilt.',
+    
+    // Warnings & Info
+    uploadHint: 'Hinweis: Dateien werden erst am Ende der Verarbeitung gebündelt heruntergeladen.',
+    offlineHint: 'Hinweis: Da das Tool lokal/offline läuft, erfolgt der Download erst am Ende der Verarbeitung.',
+    browserHint: 'Hinweis: Dein Browser lädt die gesamte ZIP-Datei auf einmal herunter, sobald alles fertig ist.',
+    mobileWarning: 'Mobilgeräte werden streiken',
+    mobileWarningText: 'Die Videoverarbeitung mit FFmpeg und das Zwischenspeichern vieler Dateien wird auf Smartphones sehr wahrscheinlich zu einem Browser-Absturz führen. Bitte nutze dieses Tool am Computer oder Laptop.',
+    browserWarning: 'Browser-Kompatibilität',
+    browserWarningText: 'Chrome und Edge sind hier am stabilsten. Firefox und Safari unterstützen das direkte Speichern großer ZIP-Dateien nur eingeschränkt, daher braucht der Export dort deutlich mehr temporären Arbeitsspeicher.',
+    
+    // Footer
+    privacy100: '🔒 100% Privat & Lokal',
+    privacyDesc: 'Deine Dateien verlassen niemals dein Gerät. Die gesamte Verarbeitung findet in deinem Browser statt. Es werden keine Daten auf einen Server geladen.',
+    privacyNote: 'Beim Aufruf der Seite werden technisch bedingt IP-Adressen vom Hosting-Provider verarbeitet.',
+    disclaimer: 'Disclaimer',
+    disclaimerText: 'Dieses Projekt steht in keiner Verbindung mit Snapchat Inc., Snap Inc. oder deren Produkten. Es ist ein unabhängiges Community-Tool zur Verarbeitung von Export-Dateien.',
+    
+    // Errors
+    criticalError: 'Kritischer Fehler: {msg}',
+    abortedByUser: 'Der Prozess wurde durch den Benutzer abgebrochen.',
+    errorProcessing: 'Fehler bei {file}: {msg}',
+    jsonParseError: 'JSON-Parse Fehler: {msg}',
+    ffmpegBufferError: 'FFmpeg-Pufferfehler: {msg}',
+    ffmpegError: 'FFmpeg Fehler Code {code}',
+    corruptVideo: 'Video-Datei ist korrupt/unlesbar',
+    processingVideo: 'Verarbeite Video {name} ({percent}%)',
+    
+    // Success messages
+    jsonParsed: '{count} Einträge aus JSON geparst',
+    ffmpegReady: 'Videoverarbeitungs-Dateien gepuffert.',
+    jsonFound: 'memories_history.json gefunden',
+    jsonMissing: 'memories_history.json fehlt',
+    mediaFound: 'Mediadateien gefunden',
+  },
+};
+
+let currentLanguage = 'en';
+
+function t(key, params = {}) {
+  const text = i18n[currentLanguage][key] || i18n.en[key] || key;
+  let result = text;
+  for (const [param, value] of Object.entries(params)) {
+    result = result.replace(`{${param}}`, value);
+  }
+  return result;
+}
+
 // State
 let jsonFile = null;
 let mediaFiles = [];
@@ -37,7 +223,7 @@ async function getFFmpeg() {
   ffmpeg.on('progress', ({ progress }) => {
     const p = Math.round(progress * 100);
     if (p > 0 && p <= 100) {
-      addLog(`⏳ Verarbeite Video ${currentProcessingName} (${p}%)`, 'info', 'current_video');
+      addLog(t('processingVideo', { name: currentProcessingName, percent: p }), 'info', 'current_video');
     }
   });
 
@@ -55,6 +241,13 @@ async function getFFmpeg() {
  * Initialize event listeners
  */
 function initEventListeners() {
+  // Language Switcher
+  const langEnBtn = document.getElementById('langEnBtn');
+  const langDeBtn = document.getElementById('langDeBtn');
+  
+  if (langEnBtn) langEnBtn.addEventListener('click', () => setLanguage('en'));
+  if (langDeBtn) langDeBtn.addEventListener('click', () => setLanguage('de'));
+
   // Folder Zone
   folderZone.addEventListener('dragover', handleDragOver);
   folderZone.addEventListener('dragleave', handleDragLeave);
@@ -73,12 +266,12 @@ function initEventListeners() {
     if (e.target.files.length && !isScanning) {
       isScanning = true;
       folderList.classList.remove('file-list--empty');
-      folderList.innerHTML = `<div class="file-item"><span class="file-item__name">⏳ Lese ${e.target.files.length} Dateien ein...</span></div>`;
+      folderList.innerHTML = `<div class="file-item"><span class="file-item__name">⏳ ${t('readingFiles', { count: e.target.files.length })}</span></div>`;
       
       progressSection.classList.add('progress-section--visible');
       progressFill.style.width = '100%';
       progressFill.style.transition = 'none';
-      progressText.textContent = `Lese ${e.target.files.length} Dateien...`;
+      progressText.textContent = t('readingFiles', { count: e.target.files.length });
       
       await new Promise(r => setTimeout(r, 50));
       await scanFiles(Array.from(e.target.files));
@@ -175,14 +368,14 @@ async function handleFolderDrop(e) {
         }
     }
     
-    progressText.textContent = `Analysiere ${filesToScan.length} Dateien...`;
-    folderList.innerHTML = `<div class="file-item"><span class="file-item__name">⏳ Analysiere ${filesToScan.length} Dateien...</span></div>`;
-    await new Promise(r => setTimeout(r, 50)); // Yield to paint
+    progressText.textContent = t('analyzingFiles', { count: filesToScan.length });
+    folderList.innerHTML = `<div class="file-item"><span class="file-item__name">⏳ ${t('analyzingFiles', { count: filesToScan.length })}</span></div>`;
+    await new Promise(r => setTimeout(r, 50));
     
     await scanFiles(filesToScan);
     statusLog = [];
   } catch (err) {
-    addLog('❌ Fehler beim Lesen des Ordners: ' + err.message, 'error');
+    addLog(`${currentLanguage === 'de' ? '❌ Fehler beim Lesen des Ordners: ' : '❌ Error reading folder: '} + ${err.message}`, 'error');
   } finally {
     isScanning = false;
     progressSection.classList.remove('progress-section--visible');
@@ -231,23 +424,20 @@ function updateUI() {
   } else {
     folderList.classList.remove('file-list--empty');
     
-    // Status für JSON
     if (jsonFile) {
-        folderList.innerHTML += `<div class="file-item"><span class="file-item__name">✅ memories_history.json gefunden</span><span class="file-item__size">${formatBytes(jsonFile.size)}</span></div>`;
+        folderList.innerHTML += `<div class="file-item"><span class="file-item__name">${currentLanguage === 'de' ? '✅ memories_history.json gefunden' : '✅ memories_history.json found'}</span><span class="file-item__size">${formatBytes(jsonFile.size)}</span></div>`;
     } else {
-        folderList.innerHTML += `<div class="file-item"><span class="file-item__name" style="color: var(--c-error)">❌ memories_history.json fehlt</span></div>`;
+        folderList.innerHTML += `<div class="file-item"><span class="file-item__name" style="color: var(--c-error)">${currentLanguage === 'de' ? '❌ memories_history.json fehlt' : '❌ memories_history.json missing'}</span></div>`;
     }
     
-    // Status für Medien
     if (mediaFiles.length > 0) {
         const totalSize = mediaFiles.reduce((sum, file) => sum + file.size, 0);
-        folderList.innerHTML += `<div class="file-item"><span class="file-item__name">✅ ${mediaFiles.length} Mediadateien gefunden</span><span class="file-item__size">${formatBytes(totalSize)}</span></div>`;
+        folderList.innerHTML += `<div class="file-item"><span class="file-item__name">✅ ${mediaFiles.length} ${currentLanguage === 'de' ? 'Mediadateien gefunden' : 'media files found'}</span><span class="file-item__size">${formatBytes(totalSize)}</span></div>`;
     } else {
         folderList.innerHTML += `<div class="file-item"><span class="file-item__name" style="color: var(--c-error)">❌ Keine Mediadateien gefunden</span></div>`;
     }
   }
 
-  // Button nur aktivieren, wenn alles da ist
   processBtn.disabled = !jsonFile || mediaFiles.length === 0;
 }
 
@@ -290,15 +480,15 @@ function updateCompatibilityWarning() {
 
   if (isMobile) {
     messages.push({
-      title: '📱 Mobilgeräte werden streiken',
-      text: 'Die Videoverarbeitung mit FFmpeg und das Zwischenspeichern vieler Dateien wird auf Smartphones sehr wahrscheinlich zu einem Browser-Absturz führen. Bitte nutze dieses Tool am Computer oder Laptop.',
+      title: t('mobileWarning'),
+      text: t('mobileWarningText'),
     });
   }
 
   if (!supportsSavePicker || isFirefox || isSafari) {
     messages.push({
-      title: '🌐 Browser-Kompatibilität',
-      text: 'Chrome und Edge sind hier am stabilsten. Firefox und Safari unterstützen das direkte Speichern großer ZIP-Dateien nur eingeschränkt, daher braucht der Export dort deutlich mehr temporären Arbeitsspeicher.',
+      title: t('browserWarning'),
+      text: t('browserWarningText'),
     });
   }
 
@@ -314,6 +504,145 @@ function updateCompatibilityWarning() {
       <strong>${message.title}:</strong> ${message.text}
     </p>
   `).join('');
+}
+
+function setLanguage(lang) {
+  currentLanguage = lang;
+  localStorage.setItem('lang', lang);
+  
+  // Update button states
+  const langEnBtn = document.getElementById('langEnBtn');
+  const langDeBtn = document.getElementById('langDeBtn');
+  if (langEnBtn) {
+    langEnBtn.classList.toggle('active', lang === 'en');
+  }
+  if (langDeBtn) {
+    langDeBtn.classList.toggle('active', lang === 'de');
+  }
+  
+  updateCompatibilityWarning();
+  updatePageLanguage();
+}
+
+function updatePageLanguage() {
+  // Update page heading and description
+  const headerBadge = document.querySelector('.header-badge span');
+  if (headerBadge) headerBadge.textContent = t('localPrivate');
+  
+  const h1 = document.querySelector('h1');
+  if (h1) h1.textContent = t('pageTitle');
+  
+  const headerDesc = document.querySelector('.header p');
+  if (headerDesc) headerDesc.textContent = t('pageDescription');
+  
+  // Update compatibility warning heading
+  const compatWarningH3 = document.querySelector('#compatWarning h3');
+  if (compatWarningH3) compatWarningH3.textContent = currentLanguage === 'de' ? '⚠️ Wichtige Systemanforderungen' : '⚠️ Important System Requirements';
+  
+  // Update skip link
+  const skipLink = document.querySelector('.skip-link');
+  if (skipLink) skipLink.textContent = currentLanguage === 'de' ? 'Zum Hauptinhalt springen' : 'Skip to main content';
+  
+  // Update section headings and descriptions - Why use this tool
+  // Find the section with 💡 in the h2
+  const allSections = document.querySelectorAll('section');
+  for (const section of allSections) {
+    const h2 = section.querySelector('h2');
+    if (h2 && h2.textContent.includes('💡')) {
+      h2.textContent = '💡 ' + t('whyUseTitle');
+      const p = section.querySelector('p');
+      if (p) p.textContent = t('whyUseText');
+      
+      // Update bullet points
+      const ul = section.querySelector('ul');
+      if (ul) {
+        const lis = ul.querySelectorAll('li');
+        if (lis[0]) lis[0].innerHTML = '<strong>✨ ' + t('whyUsePoint1').split(':')[0] + ':</strong> ' + t('whyUsePoint1').split(':')[1];
+        if (lis[1]) lis[1].innerHTML = '<strong>🗓️ ' + t('whyUsePoint2').split(':')[0] + ':</strong> ' + t('whyUsePoint2').split(':')[1];
+        if (lis[2]) lis[2].innerHTML = '<strong>🔐 ' + t('whyUsePoint3').split(':')[0] + ':</strong> ' + t('whyUsePoint3').split(':')[1];
+      }
+      break;
+    }
+  }
+  
+  // Update "How to get Snapchat export" section - find by h2 text content
+  const sections = document.querySelectorAll('section');
+  for (const section of sections) {
+    const h2 = section.querySelector('h2');
+    if (h2 && (h2.textContent.includes('How do I') || h2.textContent.includes('Wie erhalte'))) {
+      h2.textContent = t('howToGetTitle');
+      const p = section.querySelector('p');
+      if (p) p.innerHTML = t('howToGetText');
+      break;
+    }
+  }
+  
+  for (const section of sections) {
+    const h2 = section.querySelector('h2');
+    if (h2 && (h2.textContent.includes('Snapchat Ordner') || h2.textContent.includes('Select Snapchat') || h2.textContent.includes('1.'))) {
+      h2.textContent = t('step1Title');
+      const p = section.querySelector('p');
+      if (p) p.innerHTML = t('step1Description');
+      
+      const uploadZone = section.querySelector('.upload-zone');
+      if (uploadZone) {
+        const strong = uploadZone.querySelector('strong');
+        const span = uploadZone.querySelector('span');
+        if (strong) strong.textContent = t('selectFolder');
+        if (span) span.textContent = t('dragFolder');
+        uploadZone.setAttribute('aria-label', currentLanguage === 'de' ? 'Ordner hochladen' : 'Upload folder');
+      }
+    }
+  }
+  
+  // Update Step 2 (Processing)
+  for (const section of sections) {
+    const h2 = section.querySelector('h2');
+    if (h2 && (h2.textContent.includes('Verarbeitung') || h2.textContent.includes('Processing') || h2.textContent.includes('2.'))) {
+      h2.textContent = t('step2Title');
+      const p = section.querySelector('p');
+      if (p) p.innerHTML = t('step2Description');
+      
+      const progressSection = section.querySelector('.progress-section');
+      if (progressSection) {
+        progressSection.setAttribute('aria-label', currentLanguage === 'de' ? 'Fortschritt' : 'Progress');
+      }
+      
+      const actions = section.querySelector('.actions');
+      if (actions) {
+        const btns = actions.querySelectorAll('.btn');
+        for (const btn of btns) {
+          if (btn.classList.contains('btn-secondary')) btn.textContent = t('reset');
+          if (btn.classList.contains('btn-primary')) btn.textContent = t('startProcessing');
+        }
+      }
+    }
+  }
+  
+  // Update footer
+  const footer = document.querySelector('footer');
+  if (footer) {
+    const footerParagraphs = footer.querySelectorAll('p');
+    if (footerParagraphs[0]) footerParagraphs[0].innerHTML = `<strong>${t('privacy100')}:</strong> ${t('privacyDesc')}`;
+    if (footerParagraphs[1]) footerParagraphs[1].textContent = t('privacyNote');
+    if (footerParagraphs[2]) footerParagraphs[2].innerHTML = `<strong>⚖️ ${t('disclaimer')}:</strong> ${t('disclaimerText')}`;
+  }
+}
+
+function initLanguage() {
+  const saved = localStorage.getItem('lang');
+  if (saved && (saved === 'en' || saved === 'de')) {
+    currentLanguage = saved;
+  } else {
+    currentLanguage = 'en'; // Default to English
+  }
+  
+  const langEnBtn = document.getElementById('langEnBtn');
+  const langDeBtn = document.getElementById('langDeBtn');
+  if (langEnBtn) langEnBtn.classList.toggle('active', currentLanguage === 'en');
+  if (langDeBtn) langDeBtn.classList.toggle('active', currentLanguage === 'de');
+  
+  updatePageLanguage();
 }
 
 /**
@@ -338,21 +667,20 @@ async function handleProcess() {
         }],
       });
       writableStream = await fileHandle.createWritable();
-      addLog('💾 Speicherort festgelegt. Starte Verarbeitung...', 'ok');
+      addLog(t('filePickerSet'), 'ok');
     } catch (e) {
       if (e.name === 'AbortError') {
         progressSection.classList.remove('progress-section--visible');
         processBtn.disabled = false;
         return;
       }
-      addLog('ℹ️ Hinweis: Dateien werden erst am Ende der Verarbeitung gebündelt heruntergeladen.', 'warn');
+      addLog(t('uploadHint'), 'warn');
     }
   } else {
-    // Info depending on security context
     if (!window.isSecureContext) {
-      addLog('ℹ️ Hinweis: Da das Tool lokal/offline läuft, erfolgt der Download erst am Ende der Verarbeitung.', 'warn');
+      addLog(t('offlineHint'), 'warn');
     } else {
-      addLog('ℹ️ Hinweis: Dein Browser lädt die gesamte ZIP-Datei auf einmal herunter, sobald alles fertig ist.', 'warn');
+      addLog(t('browserHint'), 'warn');
     }
   }
 
@@ -370,7 +698,7 @@ async function handleProcess() {
       }
       mediaMap.get(info.mid)[info.type] = { file, info };
     }
-    addLog(`📁 Index abgeschlossen. Befreie Index-Speicher...`);
+    addLog(`📁 ${t('indexComplete')}`);
     mediaFiles = [];
 
     const allGroups = Array.from(mediaMap.entries());
@@ -385,14 +713,14 @@ async function handleProcess() {
       return VIDEO_EXTENSIONS.has(ext);
     });
 
-    addLog(`📁 Gefunden: ${imageGroups.length} Bilder, ${videoGroups.length} Videos.`, 'ok');
+    addLog(t('found', { images: imageGroups.length, videos: videoGroups.length }), 'ok');
     
     let globalProcessed = 0;
     const totalToProcess = allGroups.length;
 
     if (writableStream) {
       if (imageGroups.length > 0) {
-        addLog(`📸 Verarbeite Bilder...`);
+        addLog(t('processingImages'));
         await asyncPool(imageGroups, async ([mid, files]) => {
           await processAndZip(mid, files, zip, history);
           globalProcessed++;
@@ -401,7 +729,7 @@ async function handleProcess() {
       }
 
       if (videoGroups.length > 0) {
-        addLog(`🎥 Verarbeite Videos...`);
+        addLog(t('processingVideos'));
         await getFFmpeg(); 
         
         await asyncPool(videoGroups, async ([mid, files]) => {
@@ -414,7 +742,7 @@ async function handleProcess() {
       statusLog = statusLog.filter(item => item.id !== 'current_video');
       updateStatus();
 
-      addLog('📦 Speichere fertige Dateien live & Schritt-für-Schritt in deine Datei...', 'ok');
+      addLog(t('streamingFiles'), 'ok');
       
       const zipStream = zip.generateInternalStream({ 
         type: 'uint8array',
@@ -444,7 +772,7 @@ async function handleProcess() {
         });
       });
 
-      addLog(`✅ Fertig! Deine gespeicherte ZIP-Datei ist nun bereit.`, 'ok');
+      addLog(t('fileSaved'), 'ok');
     } else {
       const TARGET_CHUNK_BYTES = 2000 * 1000 * 1000; // 2 Gigabyte
       const memoryChunks = [];
@@ -476,7 +804,7 @@ async function handleProcess() {
       let partNumber = 1;
       
       if (totalParts > 1) {
-        addLog(`📦 Zum Speicherschutz werden die Dateien in ${totalParts} kleinere ZIP-Pakete (max. ~2GB) aufgeteilt.`, 'info');
+        addLog(t('chunking', { parts: totalParts }), 'info');
       }
 
       for (const chunk of memoryChunks) {
@@ -486,7 +814,7 @@ async function handleProcess() {
         const cVideos = chunk.filter(([_, f]) => VIDEO_EXTENSIONS.has(f.main.info.ext.toLowerCase()));
         
         if (cImages.length > 0) {
-          addLog(`📸 Verarbeite Bilder (Paket ${partNumber}/${totalParts})...`);
+          addLog(t('processingImagesPart', { part: partNumber, total: totalParts }));
           await asyncPool(cImages, async ([mid, files]) => {
             await processAndZip(mid, files, chunkZip, history);
             globalProcessed++;
@@ -495,7 +823,7 @@ async function handleProcess() {
         }
         
         if (cVideos.length > 0) {
-          addLog(`🎥 Verarbeite Videos (Paket ${partNumber}/${totalParts})...`);
+          addLog(t('processingVideosPart', { part: partNumber, total: totalParts }));
           await getFFmpeg();
           await asyncPool(cVideos, async ([mid, files]) => {
             await processAndZip(mid, files, chunkZip, history);
@@ -507,7 +835,7 @@ async function handleProcess() {
         statusLog = statusLog.filter(item => item.id !== 'current_video');
         updateStatus();
         
-        addLog(`📦 Lade ZIP-Teil ${partNumber} herunter...`, 'info');
+        addLog(t('downloadingPart', { part: partNumber }), 'info');
         const zipBlob = await chunkZip.generateAsync({ 
           type: 'blob',
           compression: 'STORE',
@@ -524,14 +852,14 @@ async function handleProcess() {
         setTimeout(() => URL.revokeObjectURL(url), 10000);
         partNumber++;
       }
-      addLog(`✅ Fertig! Alle Dateien verarbeitet und heruntergeladen.`, 'ok');
+      addLog(t('allComplete'), 'ok');
     }
 
   } catch (e) {
     if (e.message && e.message.includes('Vorgang abgebrochen')) {
-      addLog(`⚠️ Der Prozess wurde durch den Benutzer abgebrochen.`, 'warn');
+      addLog(t('abortedByUser'), 'warn');
     } else {
-      addLog(`❌ Kritischer Fehler: ${e.message}`, 'error');
+      addLog(t('criticalError', { msg: e.message }), 'error');
       console.error(e);
     }
   } finally {
@@ -575,10 +903,10 @@ async function parseJsonHistory() {
       };
     }
 
-    addLog(`✅ ${Object.keys(result).length} Einträge aus JSON geparst`, 'ok');
+    addLog(t('jsonParsed', { count: Object.keys(result).length }), 'ok');
     return result;
   } catch (e) {
-    addLog(`❌ JSON-Parse Fehler: ${e.message}`, 'error');
+    addLog(t('jsonParseError', { msg: e.message }), 'error');
     throw e;
   }
 }
@@ -646,7 +974,6 @@ async function getFFmpegBlobs() {
   try {
     const { toBlobURL } = window.FFmpegUtil;
 
-    // Alles komplett lokal!
     const coreBlobURL = await toBlobURL('vendor/ffmpeg-core.js', 'text/javascript');
     const wasmBlobURL = await toBlobURL('vendor/ffmpeg-core.wasm', 'application/wasm');
     const workerBlobURL = await toBlobURL('vendor/814.ffmpeg.js', 'text/javascript');
@@ -725,7 +1052,6 @@ async function getBase64DataUrl(fileBlob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
-    // piexif can only load data URLs or binary strings.
     reader.readAsDataURL(fileBlob);
   });
 }
@@ -762,25 +1088,22 @@ async function processMediaGroup(files, meta) {
 
   let currentFile = mainFile;
 
-  // Für Videos mit Overlay ODER fehlenden Metadaten verwenden wir FFmpeg
   if (isVideo && (needsOverlay || needDate || needLoc)) {
     try {
       currentFile = await processVideoWithFFmpeg(mainFile, overlayFile, needDate, needLoc, date, meta);
     } catch (err) {
-      addLog(`⚠️ ${mainFile.name}: ${err.message}. Original wird beibehalten.`, 'error');
-      console.error(`Fehler bei ${mainFile.name}:`, err);
+      addLog(`⚠️ ${mainFile.name}: ${err.message}. ${currentLanguage === 'de' ? 'Original wird beibehalten.' : 'Original will be preserved.'}`, 'error');
+      console.error(`${currentLanguage === 'de' ? 'Fehler bei' : 'Error at'} ${mainFile.name}:`, err);
     }
     const finalBuffer = await currentFile.arrayBuffer();
     try { await saveToCache(mid, finalBuffer); } catch(e) {}
     return finalBuffer;
   }
 
-  // Für Fotos mit Overlay verwenden wir Canvas
   if (!isVideo && needsOverlay && IMAGE_EXTENSIONS.has(ext)) {
     currentFile = await mergeImageOverlay(mainFile, overlayFile);
   }
 
-  // Für Fotos Metadaten injizieren
   if (!isVideo && IMAGE_EXTENSIONS.has(ext)) {
     const finalBuffer = await applyPiexif(currentFile, meta, needDate, needLoc, date);
     try { await saveToCache(mid, finalBuffer); } catch(e) {}
@@ -834,9 +1157,9 @@ async function processVideoWithFFmpeg(mainFile, overlayFile, needDate, needLoc, 
     if (exitCode !== 0) {
       const logText = errorLogBuffer.join('\n');
       if (logText.includes('Invalid data found') || logText.includes('moov atom not found')) {
-        throw new Error("Video-Datei ist korrupt/unlesbar");
+        throw new Error(t('corruptVideo'));
       }
-      throw new Error(`FFmpeg Fehler Code ${exitCode}`);
+      throw new Error(t('ffmpegError', { code: exitCode }));
     }
 
     const data = await ffmpeg.readFile(outName);
@@ -849,7 +1172,7 @@ async function processVideoWithFFmpeg(mainFile, overlayFile, needDate, needLoc, 
       try {
         await ffmpeg.deleteFile(f);
       } catch (e) {
-        console.error(`Fehler beim Löschen von ${f} aus virtuellem FS:`, e);
+        console.error(`${currentLanguage === 'de' ? 'Fehler beim Löschen von' : 'Error deleting'} ${f} ${currentLanguage === 'de' ? 'aus virtuellem FS' : 'from virtual FS'}:`, e);
       }
     }
   }
@@ -870,7 +1193,6 @@ async function applyPiexif(fileBlob, meta, needDate, needLoc, date) {
       exifStr = { '0th': {}, 'Exif': {}, 'GPS': {}, '1st': {}, 'Interop': {} };
     }
     
-    // Set DateTime
     if (needDate && date) {
       const dateStr =
         date.toISOString().split('T')[0].replace(/-/g, ':') +
@@ -886,7 +1208,6 @@ async function applyPiexif(fileBlob, meta, needDate, needLoc, date) {
       exifStr['Exif'][piexif.ExifIFD.DateTimeOriginal] = dateStr;
     }
 
-    // Set GPS data
     if (needLoc && meta.latitude !== null && meta.longitude !== null) {
       if (!exifStr['GPS']) exifStr['GPS'] = {};
       exifStr['GPS'][piexif.GPSIFD.GPSLatitude] = degToDms(Math.abs(meta.latitude));
@@ -946,10 +1267,10 @@ async function processAndZip(mid, files, zip, history) {
     const filename = `${mainFile.info.prefix}_${mid}.${mainFile.info.ext}`;
     zip.file(filename, processedFile, { compression: "STORE" });
   } catch (e) {
-    addLog(`❌ Fehler bei ${mainFile.file.name}: ${e.message}`, 'error');
+    addLog(t('errorProcessing', { file: mainFile.file.name, msg: e.message }), 'error');
   } finally {
     processedFile = null;
-    if (files.main.file) files.main.file = null; // Rohe Referenz löschen
+    if (files.main.file) files.main.file = null;
     if (files.overlay && files.overlay.file) files.overlay.file = null; 
   }
 }
@@ -959,7 +1280,7 @@ async function asyncPool(iterable, iteratorFn, concurrencyLimit) {
   const executing = new Set();
 
   for (const item of iterable) {
-    if (isAborted) throw new Error('Vorgang abgebrochen.');
+    if (isAborted) throw new Error(t('abortedByUser'));
 
     const p = Promise.resolve().then(() => iteratorFn(item));
     result.push(p);
@@ -1027,7 +1348,6 @@ function escapeHtml(text) {
   return text.replace(/[&<>"']/g, (m) => map[m]);
 }
 
-// 2. Absturz-Sicherung per IndexedDB für verarbeitete Dateien
 const dbName = 'MemoriesRestorerDB';
 const storeName = 'processedFiles';
 
@@ -1074,5 +1394,7 @@ async function clearCache() {
   });
 }
 
-// Initialize on DOMContentLoaded
-document.addEventListener('DOMContentLoaded', initEventListeners);
+document.addEventListener('DOMContentLoaded', () => {
+  initLanguage();
+  initEventListeners();
+});

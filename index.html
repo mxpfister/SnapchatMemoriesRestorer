@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Snapchat Memories Restorer - Verarbeite deine Snapchat-Erinnerungen privat im Browser">
+    <meta name="description" content="Snapchat Memories Restorer - Export your Snapchat memories with perfect metadata privately in your browser">
     <meta name="theme-color" content="#ffffff">
     <title>Snapchat Memories Restorer</title>
     <style>
@@ -377,6 +377,39 @@
             color: var(--c-error);
         }
 
+        /* Language Switcher */
+        .lang-switcher {
+            position: absolute;
+            top: 2rem;
+            right: 2rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .lang-btn {
+            background: var(--c-surface);
+            border: 1px solid var(--c-border);
+            color: var(--c-text);
+            padding: 0.5rem 0.75rem;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+        
+        .lang-btn:hover {
+            background: var(--c-accent);
+            color: var(--c-bg);
+            border-color: var(--c-accent);
+        }
+        
+        .lang-btn.active {
+            background: var(--c-accent);
+            color: var(--c-bg);
+            border-color: var(--c-accent);
+        }
+
         /* Accessibility Skip Link */
         .skip-link {
             position: absolute;
@@ -415,22 +448,27 @@
     <script src="coi-serviceworker.js"></script>
 </head>
 <body>
-    <a href="#main" class="skip-link">Zum Hauptinhalt springen</a>
+    <a href="#main" class="skip-link">Skip to main content</a>
     
     <main id="main">
+        <div class="lang-switcher">
+            <button id="langEnBtn" class="lang-btn active">English</button>
+            <button id="langDeBtn" class="lang-btn">Deutsch</button>
+        </div>
+        
         <header class="header">
             <div class="header-badge">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                <span>Lokal & Privat</span>
+                <span>Local & Private</span>
             </div>
             <h1>Memories Restorer</h1>
-            <p>Exportiere deine Snapchat Fotos & Videos originalgetreu.</p>
+            <p>Export your Snapchat photos & videos with perfect metadata.</p>
         </header>
 
         <div id="compatWarning" hidden style="background: rgba(14, 11, 11, 0.1); border-left: 4px solid var(--c-error); border-radius: var(--radius-sm); padding: 1.25rem; margin-bottom: 2rem; color: var(--c-text);">
             <h3 style="font-size: 1.1rem; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.5rem;">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--c-error)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                Wichtige Systemanforderungen
+                Important System Requirements
             </h3>
             <div id="compatWarningList" style="display: flex; flex-direction: column; gap: 0.8rem;"></div>
         </div>
@@ -439,38 +477,38 @@
             <!-- Was bringt mir das? (Problemerklärung für Nicht-ITler) -->
             <section class="bento-card bento-card--large">
                 <h2 style="font-size: 1.2rem; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.5rem;">
-                    <span>💡</span> Warum brauche ich dieses Tool?
+                    <span>💡</span> Why do you need this tool?
                 </h2>
                 <p style="margin: 0; font-size: 0.95rem; opacity: 0.9; line-height: 1.5;">
-                    Der offizielle Snapchat-Export liefert unfertige Dateien: Filter sind vom Bild getrennt, und das Aufnahmedatum fehlt. Ohne Anpassung herrscht auf deinem Handy das reinste Datei-Chaos. Dieses Tool repariert alles vollautomatisch:
+                    The official Snapchat export provides unfinished files: filters are separated from the image, and the recording date is missing. Without adjustment, your phone's file management is a mess. This tool automatically fixes everything:
                 </p>
                 <ul style="margin: 0.8rem 0 0 0; padding-left: 1.2rem; font-size: 0.95rem; opacity: 0.9; line-height: 1.5;">
-                    <li style="margin-bottom: 0.4rem;"><strong>✨ Filter einbacken:</strong> Texte und Sticker werden fest in Fotos/Videos eingefügt.</li>
-                    <li style="margin-bottom: 0.4rem;"><strong>🗓️ Korrektes Datum:</strong> Original-Datum & GPS werden ergänzt. Deine Handy-Galerie sortiert alles perfekt ein!</li>
-                    <li><strong>🔐 100% Privat:</strong> Die Verarbeitung läuft rein lokal in deinem Browser. Nichts wird hochgeladen!</li>
+                    <li style="margin-bottom: 0.4rem;"><strong>✨ Embed filters:</strong> Texts and stickers are permanently inserted into photos/videos.</li>
+                    <li style="margin-bottom: 0.4rem;"><strong>🗓️ Correct date:</strong> Original date & GPS are added. Your phone gallery sorts everything perfectly!</li>
+                    <li><strong>🔐 100% Private:</strong> Processing runs entirely locally in your browser. Nothing is uploaded!</li>
                 </ul>
             </section>
 
             <!-- Info: Wie komme ich an die Daten? -->
             <section class="bento-card bento-card--large" style="background: var(--c-surface); border: 1px dashed var(--c-accent);">
                 <div class="card-icon" style="color: var(--c-accent)">ℹ️</div>
-                <h2 style="font-size: 1.1rem; margin-bottom: 0.5rem;">Wie erhalte ich meinen Snapchat-Export?</h2>
+                <h2 style="font-size: 1.1rem; margin-bottom: 0.5rem;">How do I get my Snapchat export?</h2>
                 <p style="margin: 0; font-size: 0.95rem; opacity: 0.9;">
-                    Gehe in der <strong>Snapchat App</strong> auf dein Profil &rarr; <strong>Einstellungen</strong> &rarr; <strong>Meine Daten</strong>.
-                    <br>Wähle unten unbedingt <strong>"Deine Memorys exportieren"</strong> und <strong>"JSON-Dateien exportieren"</strong> aus!
-                    Streiche beim Kalender über den <em>gesamten Zeitraum</em> und sende die Anfrage ab.
+                    In the <strong>Snapchat app</strong> go to your profile &rarr; <strong>Settings</strong> &rarr; <strong>My Data</strong>.
+                    <br>Be sure to select <strong>"Export your Memories"</strong> and <strong>"Export JSON files"</strong> at the bottom!
+                    Swipe through the <em>entire time period</em> on the calendar and submit the request.
                 </p>
             </section>
 
             <!-- Step 1: Upload -->
             <section class="bento-card bento-card--large">
                 <div class="card-icon">📁</div>
-                <h2>1. Snapchat Ordner auswählen</h2>
-                <p>Wähle deinen kompletten, entpackten Snapchat-Export-Ordner aus (z.B. <code>mydata~...</code>). Die App findet die <code>memories_history.json</code> und die Mediadateien ganz automatisch!</p>
+                <h2>1. Select Snapchat folder</h2>
+                <p>Select your complete, unzipped Snapchat export folder (e.g. <code>mydata~...</code>). The app automatically finds the <code>memories_history.json</code> and media files!</p>
                 
-                <div class="upload-zone" id="folderZone" tabindex="0" role="button" aria-label="Ordner hochladen">
-                    <strong>Export-Ordner auswählen</strong>
-                    <span>Klicke hier oder ziehe den gesamten Ordner hinein</span>
+                <div class="upload-zone" id="folderZone" tabindex="0" role="button" aria-label="Upload folder">
+                    <strong>Select export folder</strong>
+                    <span>Click here or drag the entire folder in</span>
                     <input type="file" id="folderInput" webkitdirectory directory multiple tabindex="-1" />
                 </div>
                 <div class="file-list file-list--empty" id="folderList" role="status"></div>
@@ -479,8 +517,8 @@
             <!-- Processing Output -->
             <section class="bento-card bento-card--large">
                 <div class="card-icon">⚡️</div>
-                <h2>2. Verarbeitung</h2>
-                <p>Dateien werden abgeglichen und Metadaten (Datum & GPS) werden auf die Fotos geschrieben. Du erhältst ein vollständiges ZIP-Archiv.</p>
+                <h2>2. Processing</h2>
+                <p>Files are matched and metadata (date & GPS) are written to photos. You get a complete ZIP archive.</p>
 
                 <div class="progress-section" id="progressSection" role="region" aria-label="Fortschritt">
                     <div class="progress-bar">
@@ -492,17 +530,17 @@
                 <div class="status-box" id="statusBox" role="log" aria-live="polite"></div>
 
                 <div class="actions">
-                    <button class="btn btn-secondary" id="clearBtn">Zurücksetzen</button>
-                    <button class="btn btn-primary" id="processBtn" disabled>Verarbeitung starten</button>
+                    <button class="btn btn-secondary" id="clearBtn">Reset</button>
+                    <button class="btn btn-primary" id="processBtn" disabled>Start processing</button>
                 </div>
             </section>
         </div>
     </main>
 
     <footer style="text-align: center; margin-top: 3rem; padding: 2rem 1rem; color: var(--c-muted); font-size: 0.85rem; border-top: 1px solid var(--c-surface);">
-        <p><strong>🔒 100% Privat & Lokal:</strong> Deine Dateien verlassen niemals dein Gerät. Die gesamte Verarbeitung findet in deinem Browser statt. Es werden keine Daten auf einen Server geladen.</p>
-        <p style="margin-top: 1rem; opacity: 0.8;">Beim Aufruf der Seite werden technisch bedingt IP-Adressen vom Hosting-Provider verarbeitet.</p>
-        <p style="margin-top: 1rem; opacity: 0.7; font-size: 0.8rem;"><strong>⚖️ Disclaimer:</strong> Dieses Projekt steht in keiner Verbindung mit Snapchat Inc., Snap Inc. oder deren Produkten. Es ist ein unabhängiges Community-Tool zur Verarbeitung von Export-Dateien.</p>
+        <p><strong>🔒 100% Private & Local:</strong> Your files never leave your device. All processing happens in your browser. No data is uploaded to any server.</p>
+        <p style="margin-top: 1rem; opacity: 0.8;">When loading the page, IP addresses are technically processed by the hosting provider.</p>
+        <p style="margin-top: 1rem; opacity: 0.7; font-size: 0.8rem;"><strong>⚖️ Disclaimer:</strong> This project is not affiliated with Snapchat Inc., Snap Inc., or their products. It is an independent community tool for processing export files.</p>
         <div style="margin-top: 1.5rem; display: flex; justify-content: center; gap: 1.5rem;">
             <a href="https://max-pfister.me/impressum" target="_blank" rel="noopener noreferrer" style="color: var(--c-accent); text-decoration: underline;">Impressum</a>
             <a href="https://max-pfister.me/datenschutz" target="_blank" rel="noopener noreferrer" style="color: var(--c-accent); text-decoration: underline;">Datenschutz</a>
