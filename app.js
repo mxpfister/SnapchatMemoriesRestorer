@@ -268,7 +268,37 @@ async function handleProcess() {
   statusLog = [];
   progressSection.classList.add('progress-section--visible');
   processBtn.disabled = true;
-  addLog('🚀 Starte Verarbeitung...');
+  
+  let writableStream = null;
+  let fileHandle = null;
+
+  if ('showSaveFilePicker' in window) {
+    try {
+      fileHandle = await window.showSaveFilePicker({
+        suggestedName: `snapchat-export-${new Date().toISOString().split('T')[0]}.zip`,
+        types: [{
+          description: 'ZIP Archiv',
+          accept: { 'application/zip': ['.zip'] },
+        }],
+      });
+      writableStream = await fileHandle.createWritable();
+      addLog('💾 Speicherort festgelegt. Starte Verarbeitung...', 'ok');
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        progressSection.classList.remove('progress-section--visible');
+        processBtn.disabled = false;
+        return;
+      }
+      addLog('ℹ️ Hinweis: Dateien werden erst am Ende der Verarbeitung gebündelt heruntergeladen.', 'warn');
+    }
+  } else {
+    // Info depending on security context
+    if (!window.isSecureContext) {
+      addLog('ℹ️ Hinweis: Da das Tool lokal/offline läuft, erfolgt der Download erst am Ende der Verarbeitung.', 'warn');
+    } else {
+      addLog('ℹ️ Hinweis: Dein Browser lädt die gesamte ZIP-Datei auf einmal herunter, sobald alles fertig ist.', 'warn');
+    }
+  }
 
   try {
     const history = await parseJsonHistory();
@@ -304,49 +334,118 @@ async function handleProcess() {
     let globalProcessed = 0;
     const totalToProcess = allGroups.length;
 
-    if (imageGroups.length > 0) {
-      addLog(`📸 Verarbeite Bilder...`);
-      await asyncPool(imageGroups, async ([mid, files]) => {
-        await processAndZip(mid, files, zip, history);
-        globalProcessed++;
-        updateProgress(globalProcessed, totalToProcess);
-      }, 4);
-    }
+    if (writableStream) {
+      if (imageGroups.length > 0) {
+        addLog(`📸 Verarbeite Bilder...`);
+        await asyncPool(imageGroups, async ([mid, files]) => {
+          await processAndZip(mid, files, zip, history);
+          globalProcessed++;
+          updateProgress(globalProcessed, totalToProcess);
+        }, 4);
+      }
 
-    if (videoGroups.length > 0) {
-      addLog(`🎥 Verarbeite Videos...`);
-      await getFFmpeg(); 
+      if (videoGroups.length > 0) {
+        addLog(`🎥 Verarbeite Videos...`);
+        await getFFmpeg(); 
+        
+        await asyncPool(videoGroups, async ([mid, files]) => {
+          await processAndZip(mid, files, zip, history);
+          globalProcessed++;
+          updateProgress(globalProcessed, totalToProcess);
+        }, 1);
+      }
+
+      statusLog = statusLog.filter(item => item.id !== 'current_video');
+      updateStatus();
+
+      addLog('📦 Speichere fertige Dateien live & Schritt-für-Schritt in deine Datei...', 'ok');
       
-      await asyncPool(videoGroups, async ([mid, files]) => {
-        await processAndZip(mid, files, zip, history);
-        globalProcessed++;
-        updateProgress(globalProcessed, totalToProcess);
-      }, 1);
+      const zipStream = zip.generateInternalStream({ 
+        type: 'uint8array',
+        compression: 'STORE',
+        streamFiles: true 
+      });
+
+      await new Promise((resolve, reject) => {
+        zipStream.on('data', async (data, metadata) => {
+          zipStream.pause();
+          try {
+            await writableStream.write(data);
+            updateProgress(metadata.percent, 100);
+            zipStream.resume();
+          } catch(e) {
+            reject(e);
+          }
+        })
+        .on('error', (err) => reject(err))
+        .on('end', async () => {
+          try {
+            await writableStream.close();
+            resolve();
+          } catch(e) {
+            reject(e);
+          }
+        });
+      });
+
+      addLog(`✅ Fertig! Deine gespeicherte ZIP-Datei ist nun bereit.`, 'ok');
+    } else {
+      const CHUNK_SIZE = 500;
+      let partNumber = 1;
+      const totalParts = Math.ceil(totalToProcess / CHUNK_SIZE);
+      
+      if (totalParts > 1) {
+        addLog(`📦 Zum Speicherschutz werden die Dateien in ${totalParts} kleinere ZIP-Pakete aufgeteilt.`, 'info');
+      }
+
+      for (let i = 0; i < totalToProcess; i += CHUNK_SIZE) {
+        const chunk = allGroups.slice(i, i + CHUNK_SIZE);
+        const chunkZip = new JSZip();
+        
+        const cImages = chunk.filter(([_, f]) => IMAGE_EXTENSIONS.has(f.main.info.ext.toLowerCase()));
+        const cVideos = chunk.filter(([_, f]) => VIDEO_EXTENSIONS.has(f.main.info.ext.toLowerCase()));
+        
+        if (cImages.length > 0) {
+          addLog(`📸 Verarbeite Bilder (Paket ${partNumber}/${totalParts})...`);
+          await asyncPool(cImages, async ([mid, files]) => {
+            await processAndZip(mid, files, chunkZip, history);
+            globalProcessed++;
+            updateProgress(globalProcessed, totalToProcess);
+          }, 4);
+        }
+        
+        if (cVideos.length > 0) {
+          addLog(`🎥 Verarbeite Videos (Paket ${partNumber}/${totalParts})...`);
+          await getFFmpeg();
+          await asyncPool(cVideos, async ([mid, files]) => {
+            await processAndZip(mid, files, chunkZip, history);
+            globalProcessed++;
+            updateProgress(globalProcessed, totalToProcess);
+          }, 1);
+        }
+        
+        statusLog = statusLog.filter(item => item.id !== 'current_video');
+        updateStatus();
+        
+        addLog(`📦 Lade ZIP-Teil ${partNumber} herunter...`, 'info');
+        const zipBlob = await chunkZip.generateAsync({ 
+          type: 'blob',
+          compression: 'STORE',
+        });
+        
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = totalParts > 1 ? `snapchat-export-part${partNumber}.zip` : `snapchat-export-${new Date().toISOString().split('T')[0]}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        partNumber++;
+      }
+      addLog(`✅ Fertig! Alle Dateien verarbeitet und heruntergeladen.`, 'ok');
     }
-
-    statusLog = statusLog.filter(item => item.id !== 'current_video');
-    updateStatus();
-
-    addLog('📦 Erstelle ZIP-Archiv...', 'ok');
-    const zipBlob = await zip.generateAsync({ 
-      type: 'blob',
-      compression: 'STORE',
-      streamFiles: true 
-    }, (metadata) => {
-        updateProgress(metadata.percent, 100);
-    });
-    
-    const url = URL.createObjectURL(zipBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `snapchat-export-${new Date().toISOString().split('T')[0]}.zip`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-
-    addLog(`✅ Fertig! Alle Dateien verarbeitet.`, 'ok');
 
   } catch (e) {
     addLog(`❌ Kritischer Fehler: ${e.message}`, 'error');
