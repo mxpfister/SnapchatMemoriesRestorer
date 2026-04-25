@@ -21,6 +21,8 @@ const statusBox = document.getElementById('statusBox');
 const progressSection = document.getElementById('progressSection');
 const progressFill = document.getElementById('progressFill');
 const progressText = document.getElementById('progressText');
+const compatWarning = document.getElementById('compatWarning');
+const compatWarningList = document.getElementById('compatWarningList');
 
 let ffmpegInstance = null;
 let currentProcessingName = '';
@@ -90,6 +92,8 @@ function initEventListeners() {
   // Buttons
   clearBtn.addEventListener('click', handleClear);
   processBtn.addEventListener('click', handleProcess);
+
+  updateCompatibilityWarning();
 }
 
 /**
@@ -270,6 +274,46 @@ function handleClear() {
   folderInput.value = '';
   updateProgress(0, 1);
   updateUI();
+}
+
+function updateCompatibilityWarning() {
+  if (!compatWarning || !compatWarningList) return;
+
+  const ua = navigator.userAgent || '';
+  const uaData = navigator.userAgentData;
+  const isMobile = (uaData && uaData.mobile) || /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || (navigator.maxTouchPoints > 1 && matchMedia('(pointer: coarse)').matches);
+  const isFirefox = /Firefox/i.test(ua);
+  const isSafari = /Safari/i.test(ua) && !/Chrome|Chromium|Edg|OPR/i.test(ua);
+  const supportsSavePicker = 'showSaveFilePicker' in window && window.isSecureContext;
+
+  const messages = [];
+
+  if (isMobile) {
+    messages.push({
+      title: '📱 Mobilgeräte werden streiken',
+      text: 'Die Videoverarbeitung mit FFmpeg und das Zwischenspeichern vieler Dateien wird auf Smartphones sehr wahrscheinlich zu einem Browser-Absturz führen. Bitte nutze dieses Tool am Computer oder Laptop.',
+    });
+  }
+
+  if (!supportsSavePicker || isFirefox || isSafari) {
+    messages.push({
+      title: '🌐 Browser-Kompatibilität',
+      text: 'Chrome und Edge sind hier am stabilsten. Firefox und Safari unterstützen das direkte Speichern großer ZIP-Dateien nur eingeschränkt, daher braucht der Export dort deutlich mehr temporären Arbeitsspeicher.',
+    });
+  }
+
+  if (messages.length === 0) {
+    compatWarning.hidden = true;
+    compatWarningList.innerHTML = '';
+    return;
+  }
+
+  compatWarning.hidden = false;
+  compatWarningList.innerHTML = messages.map((message) => `
+    <p style="margin: 0; color: var(--c-text);">
+      <strong>${message.title}:</strong> ${message.text}
+    </p>
+  `).join('');
 }
 
 /**
