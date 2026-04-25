@@ -1,91 +1,37 @@
-# 📸 Snapchat Memories Saver - Browser Version
+# 👻 Snapchat Memories Restorer
 
-Eine **100% private, vollständig im Browser laufende** Lösung zur Verarbeitung deiner Snapchat-Erinnerungen.
+A purely client-side web tool to fix, merge, and organize your Snapchat GDPR data exports. 
+
+## 💡 The Problem
+When you request your data export from Snapchat, the media files you receive are incomplete. The official export separates your photos/videos from their overlays (filters, text, stickers) and strips the EXIF creation dates. If you import these raw files into Apple Photos or Google Photos, your timeline will be an unorganized mess.
 
 ## ✨ Features
+This tool acts as a bridge between the messy Snapchat export and your clean photo library. It automatically:
+* **Bakes in Overlays:** Merges text, stickers, and filters directly back into your photos and videos.
+* **Restores Metadata (EXIF):** Reads the `memories_history.json` and injects the original capture dates and GPS coordinates directly into the files.
+* **100% Private & Local:** The entire processing happens locally inside your browser. No files are ever uploaded to a server.
+* **Bulk Processing:** Handles your entire export folder at once and provides a single, ready-to-use ZIP archive.
 
-- ✅ **Komplett im Browser** - keine Server-Installation nötig
-- 🔒 **Vollständig privat** - alle Daten bleiben lokal
-- 📱 **Responsive Design** - funktioniert auf Desktop & Mobile
-- 🎯 **Einfache Bedienung** - Drag & Drop Upload
-- 📝 **EXIF-Daten** - automatisches Setzen von Datum & GPS
-- 📦 **ZIP-Download** - verarbeitete Dateien als ZIP
+## 🚀 How to Use
 
-## 🚀 So verwendest du es
+### 1. Get your Snapchat Data
+1. Open the **Snapchat App** and go to your Profile &rarr; **Settings** &rarr; **My Data**.
+2. Make sure to check **"Export your Memories"** and **"Export JSON files"**.
+3. Select the *entire time range* on the calendar and submit your request.
+4. Once you receive the email from Snapchat, download and extract the ZIP file.
 
-### Lokal (schnell testen)
-```bash
-# Öffne einfach die index.html im Browser
-open index.html
-```
+### 2. Process your Memories
+1. Open the **Snapchat Memories Restorer** web app.
+2. Drag and drop your extracted Snapchat export folder (usually starting with `mydata~...`) into the upload zone.
+3. The app will automatically scan for media files and the `memories_history.json`.
+4. Click **Start Processing**. 
+5. Once finished, a new ZIP file containing your fully restored memories will be downloaded automatically.
 
-### GitHub Pages (für andere freigeben)
+## 🛠️ Technical Details
+This project runs entirely on the client side using Vanilla JavaScript and WebAssembly. 
+* **Video Processing:** Powered by `ffmpeg.wasm` (using `coi-serviceworker` to bypass CORS/SharedArrayBuffer restrictions on static hosts like GitHub Pages).
+* **Image & EXIF Manipulation:** Utilizes Canvas API, `piexif.js`, and `exifr`.
+* **Archiving:** Uses `JSZip` to bundle the processed files directly in the browser.
 
-1. **Fork oder Clone dieses Repo**
-   ```bash
-   git clone https://github.com/dein-username/snapchat-memories-saver
-   cd snapchat-memories-saver
-   ```
-
-2. **In GitHub-Einstellungen aktivieren:**
-   - Settings → Pages
-   - Source: Main Branch
-   - Speichern
-
-3. **Die Seite ist dann verfügbar unter:**
-   ```
-   https://dein-username.github.io/snapchat-memories-saver/
-   ```
-
-## 📖 Verwendung
-
-1. **Deine Snapchat-Daten exportieren:**
-   - Gehe zu https://accounts.snapchat.com/accounts/downloadmydata
-   - Starte einen Datenexport
-   - Warte auf die Email mit dem Download-Link
-   - Lade `memories_history.json` herunter
-
-2. **In der App hochladen:**
-   - Lade die JSON-Datei hoch
-   - Füge all deine Mediadateien hinzu (Fotos, Videos)
-   - Klicke "Verarbeiten"
-   - Die verarbeiteten Dateien werden als ZIP heruntergeladen
-
-## 🔧 Was wird verarbeitet?
-
-- 📷 **Fotos** (JPG, PNG, HEIC)
-  - EXIF-Datum aus JSON-Historie
-  - GPS-Koordinaten falls verfügbar
-  
-- 🎬 **Videos** (MP4, MOV, WebM)
-  - Bleiben unverändert (keine EXIF in Browser)
-  - Werden mit korrektem Namen versehen
-
-## ⚠️ Wichtig
-
-- **Keine Abhängigkeiten!** Alles läuft mit CDN-Libraries
-- **Keine Datenübertragung** - wirklich alles lokal!
-- Videos können bis zu 2GB groß sein (Browser-Limit)
-- EXIF-Daten sind auf Fotos beschränkt
-
-## 🛠️ Technologie Stack
-
-- **HTML5 Canvas** - UI & Vorschau
-- **piexifjs** - EXIF-Daten lesen/schreiben
-- **jszip** - ZIP-Erstellung
-- **Vanilla JavaScript** - keine Abhängigkeiten
-
-## 📄 Lizenz
-
-MIT - Frei verwendbar und modifizierbar
-
-## ❓ Hilfe
-
-Falls etwas nicht funktioniert:
-1. Öffne die Browser-Konsole (F12) auf Fehler prüfen
-2. Stelle sicher, dass die JSON-Datei korrekt ist
-3. Versuche mit wenigen Dateien zuerst
-
----
-
-**Feedback & Bug-Reports:** Erstelle einen Issue im GitHub Repo!
+## 📄 License & Privacy
+This is a client-side only tool. Your data never leaves your device.
