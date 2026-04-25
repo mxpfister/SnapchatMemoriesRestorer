@@ -263,7 +263,10 @@ async function handleProcess() {
     }
 
     addLog(`📁 ${mediaMap.size} valide Memory-Gruppen gefunden`, 'ok');
+    
     let processed = 0;
+    let processedImagesCount = 0;
+    let processedVideosCount = 0;
 
     for (const [mid, files] of mediaMap.entries()) {
       const meta = history[mid];
@@ -278,6 +281,12 @@ async function handleProcess() {
         const processedFile = await processMediaGroup(files, meta);
         const filename = `${mainFile.info.prefix}_${mid}.${mainFile.info.ext}`;
         zip.file(filename, processedFile);
+        
+        if (VIDEO_EXTENSIONS.has(mainFile.info.ext)) {
+          processedVideosCount++;
+        } else {
+          processedImagesCount++;
+        }
       } catch (e) {
         addLog(`❌ Fehler bei ${mainFile.file.name}: ${e.message}`, 'error');
       }
@@ -289,6 +298,13 @@ async function handleProcess() {
     // Löscht den "⏳ Verarbeite Video..." Dummy aus der Liste, wenn alles fertig ist
     statusLog = statusLog.filter(item => item.id !== 'current_video');
     updateStatus();
+
+    if (processedImagesCount > 0) {
+      addLog(`✅ Alle ${processedImagesCount} Bilddateien wurden verarbeitet`, 'ok');
+    }
+    if (processedVideosCount > 0) {
+      addLog(`✅ Alle ${processedVideosCount} Videodateien wurden verarbeitet`, 'ok');
+    }
 
     addLog('📦 Erstelle ZIP-Archiv, bitte einen Moment Geduld...', 'ok');
     
@@ -517,8 +533,8 @@ async function processMediaGroup(files, meta) {
     try {
       currentFile = await processVideoWithFFmpeg(mainFile, overlayFile, needDate, needLoc, date, meta);
     } catch (err) {
-      addLog(`⚠️ Video-Verarbeitung fehlgeschlagen bei ${mainFile.name}, nutze Original.`, 'error');
-      console.error(err);
+      addLog(`⚠️ ${mainFile.name}: ${err.message}. Original wird beibehalten.`, 'error');
+      console.error(`Fehler bei ${mainFile.name}:`, err);
     }
     return await currentFile.arrayBuffer();
   }
@@ -544,6 +560,14 @@ async function processVideoWithFFmpeg(mainFile, overlayFile, needDate, needLoc, 
   
   const { FFmpeg } = window.FFmpegWASM;
   const ffmpeg = new FFmpeg();
+  
+  let errorLogBuffer = [];
+  ffmpeg.on('log', ({ message }) => {
+    errorLogBuffer.push(message);
+  });
+
+  // Schreibt die echten FFmpeg-Fehler in die Browser-Konsole (F12)
+  ffmpeg.on('log', ({ message }) => console.log('FFmpeg Log:', message));
   
   // Minimales Logging, um die UI nicht zu überschwemmen
   ffmpeg.on('progress', ({ progress }) => {
@@ -598,7 +622,17 @@ async function processVideoWithFFmpeg(mainFile, overlayFile, needDate, needLoc, 
     
     const exitCode = await ffmpeg.exec(cmd);
     if (exitCode !== 0) {
-      throw new Error(`FFmpeg brach ab mit Code ${exitCode}`);
+      const logText = errorLogBuffer.join('\n');
+      
+      if (logText.includes('Invalid data found') || logText.includes('moov atom not found')) {
+        throw new Error("Video-Datei ist korrupt/unlesbar");
+      }
+      
+      // Für alle anderen Fehler:
+      throw new Error(`Verarbeitungsfehler (Code ${exitCode})`);
+      console.error(`\n❌ === FFMPEG LOG FÜR ABGESTÜRZTES VIDEO: ${mainFile.name} ===`);
+      console.error(errorLogBuffer.join('\n'));
+      console.error(`========================================================\n`);
     }
     
     const data = await ffmpeg.readFile(outName);
