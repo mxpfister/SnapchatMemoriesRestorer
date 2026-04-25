@@ -21,6 +21,33 @@ const progressSection = document.getElementById('progressSection');
 const progressFill = document.getElementById('progressFill');
 const progressText = document.getElementById('progressText');
 
+let ffmpegInstance = null;
+let currentProcessingName = '';
+
+async function getFFmpeg() {
+  if (ffmpegInstance) return ffmpegInstance;
+
+  const blobs = await getFFmpegBlobs();
+  const { FFmpeg } = window.FFmpegWASM;
+  const ffmpeg = new FFmpeg();
+
+  ffmpeg.on('progress', ({ progress }) => {
+    const p = Math.round(progress * 100);
+    if (p > 0 && p <= 100) {
+      addLog(`⏳ Verarbeite Video ${currentProcessingName} (${p}%)`, 'info', 'current_video');
+    }
+  });
+
+  await ffmpeg.load({
+    coreURL: blobs.coreBlobURL,
+    wasmURL: blobs.wasmBlobURL,
+    classWorkerURL: blobs.workerBlobURL,
+  });
+
+  ffmpegInstance = ffmpeg;
+  return ffmpeg;
+}
+
 /**
  * Initialize event listeners
  */
@@ -248,85 +275,90 @@ async function handleProcess() {
     const zip = new JSZip();
     const mediaMap = new Map();
 
-    // Index media files
     for (const file of mediaFiles) {
       const info = extractMediaInfo(file.name);
-      if (!info) {
-        addLog(`⚠️ Überspringe ungültigen Namen: ${file.name}`);
-        continue;
-      }
+      if (!info) continue;
 
       if (!mediaMap.has(info.mid)) {
         mediaMap.set(info.mid, {});
       }
       mediaMap.get(info.mid)[info.type] = { file, info };
     }
+    addLog(`📁 Index abgeschlossen. Befreie Index-Speicher...`);
+    mediaFiles = [];
 
-    addLog(`📁 ${mediaMap.size} valide Memory-Gruppen gefunden`, 'ok');
+    const allGroups = Array.from(mediaMap.entries());
     
-    let processed = 0;
-    let processedImagesCount = 0;
-    let processedVideosCount = 0;
+    const imageGroups = allGroups.filter(([_, files]) => {
+      const ext = files.main.info.ext.toLowerCase();
+      return IMAGE_EXTENSIONS.has(ext);
+    });
+    
+    const videoGroups = allGroups.filter(([_, files]) => {
+      const ext = files.main.info.ext.toLowerCase();
+      return VIDEO_EXTENSIONS.has(ext);
+    });
 
-    for (const [mid, files] of mediaMap.entries()) {
-      const meta = history[mid];
-      const mainFile = files.main;
+    addLog(`📁 Gefunden: ${imageGroups.length} Bilder, ${videoGroups.length} Videos.`, 'ok');
+    
+    let globalProcessed = 0;
+    const totalToProcess = allGroups.length;
 
-      if (!mainFile) {
-        addLog(`⚠️ Keine Main-Datei für ${mid}`, 'error');
-        continue;
-      }
+    if (imageGroups.length > 0) {
+      addLog(`📸 Verarbeite Bilder...`);
+      await asyncPool(imageGroups, async ([mid, files]) => {
+        await processAndZip(mid, files, zip, history);
+        globalProcessed++;
+        updateProgress(globalProcessed, totalToProcess);
+      }, 4);
+    }
 
-      try {
-        const processedFile = await processMediaGroup(files, meta);
-        const filename = `${mainFile.info.prefix}_${mid}.${mainFile.info.ext}`;
-        zip.file(filename, processedFile);
-        
-        if (VIDEO_EXTENSIONS.has(mainFile.info.ext)) {
-          processedVideosCount++;
-        } else {
-          processedImagesCount++;
-        }
-      } catch (e) {
-        addLog(`❌ Fehler bei ${mainFile.file.name}: ${e.message}`, 'error');
-      }
-
-      processed++;
-      updateProgress(processed, mediaMap.size);
+    if (videoGroups.length > 0) {
+      addLog(`🎥 Verarbeite Videos...`);
+      await getFFmpeg(); 
+      
+      await asyncPool(videoGroups, async ([mid, files]) => {
+        await processAndZip(mid, files, zip, history);
+        globalProcessed++;
+        updateProgress(globalProcessed, totalToProcess);
+      }, 1);
     }
 
     statusLog = statusLog.filter(item => item.id !== 'current_video');
     updateStatus();
 
-    const totalSuccess = processedImagesCount + processedVideosCount;
-    
-    if (totalSuccess === mediaMap.size) {
-      addLog(`✅ Alle ${mediaMap.size} Memories (${processedImagesCount} Bilder, ${processedVideosCount} Videos) erfolgreich verarbeitet!`, 'ok');
-    } else {
-      const failedCount = mediaMap.size - totalSuccess;
-      addLog(`⚠️ Verarbeitung fertig: ${totalSuccess} erfolgreich, ${failedCount} übersprungen/fehlerhaft.`, 'error');
-    }
-
-    addLog('📦 Erstelle ZIP-Archiv, bitte einen Moment Geduld...', 'ok');
-    
-    // Create and download ZIP
-    const zipBlob = await zip.generateAsync({ type: 'blob' }, (metadata) => {
+    addLog('📦 Erstelle ZIP-Archiv...', 'ok');
+    const zipBlob = await zip.generateAsync({ 
+      type: 'blob',
+      compression: 'STORE',
+      streamFiles: true 
+    }, (metadata) => {
         updateProgress(metadata.percent, 100);
     });
     
     const url = URL.createObjectURL(zipBlob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'snapchat-memories.zip';
+    a.download = `snapchat-export-${new Date().toISOString().split('T')[0]}.zip`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
 
-    addLog(`✅ Fertig! ZIP-Datei wird heruntergeladen...`, 'ok');
+    addLog(`✅ Fertig! Alle Dateien verarbeitet.`, 'ok');
+
   } catch (e) {
-    addLog(`❌ Verarbeitung fehlgeschlagen: ${e.message}`, 'error');
+    addLog(`❌ Kritischer Fehler: ${e.message}`, 'error');
+    console.error(e);
   } finally {
+    if (ffmpegInstance) {
+      try {
+        await ffmpegInstance.terminate();
+      } catch (err) {}
+      console.error(err)
+      ffmpegInstance = null;
+    }
     processBtn.disabled = false;
   }
 }
@@ -478,10 +510,14 @@ async function mergeImageOverlay(mainFile, overlayFile) {
       canvas.width = mainImg.width;
       canvas.height = mainImg.height;
       ctx.drawImage(mainImg, 0, 0);
+      URL.revokeObjectURL(mainImg.src);
       
       overlayImg.onload = () => {
         ctx.drawImage(overlayImg, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(overlayImg.src);
         canvas.toBlob((blob) => {
+            canvas.width = 0;
+            canvas.height = 0;
             resolve(new File([blob], mainFile.name, { type: 'image/jpeg' }));
         }, 'image/jpeg', 0.95);
       };
@@ -557,93 +593,52 @@ async function processMediaGroup(files, meta) {
  * Handle video manipulation with FFmpeg 
  */
 async function processVideoWithFFmpeg(mainFile, overlayFile, needDate, needLoc, date, meta) {
-  const blobs = await getFFmpegBlobs();
-  
-  const { FFmpeg } = window.FFmpegWASM;
-  const ffmpeg = new FFmpeg();
-  
-  let errorLogBuffer = [];
-  ffmpeg.on('log', ({ message }) => {
-    errorLogBuffer.push(message);
-  });
-
-  // Schreibt die echten FFmpeg-Fehler in die Browser-Konsole (F12)
-  ffmpeg.on('log', ({ message }) => console.log('FFmpeg Log:', message));
-  
-  // Minimales Logging, um die UI nicht zu überschwemmen
-  ffmpeg.on('progress', ({ progress }) => {
-    const p = Math.round(progress * 100);
-    if (p > 0 && p <= 100) {
-      addLog(`⏳ Verarbeite Video ${mainFile.name} (${p}%)`, 'info', 'current_video');
-    }
-  });
-
-  await ffmpeg.load({
-    coreURL: blobs.coreBlobURL,
-    wasmURL: blobs.wasmBlobURL,
-    classWorkerURL: blobs.workerBlobURL,
-  });
-
+  const ffmpeg = await getFFmpeg();
   const { fetchFile } = window.FFmpegUtil;
-  
+
+  const mainName = 'input_main.mp4';
+  const overlayName = 'input_overlay.png';
+  const outName = 'output_final.mp4';
+
+  currentProcessingName = mainFile.name;
+
   try {
-    const mainName = 'main.mp4';
     await ffmpeg.writeFile(mainName, await fetchFile(mainFile));
-    
-    let overlayName = null;
     if (overlayFile) {
-      overlayName = 'overlay.png';
       await ffmpeg.writeFile(overlayName, await fetchFile(overlayFile));
     }
-    
-    const outName = 'out.mp4';
+
     let cmd = ['-y', '-i', mainName];
-    
     if (overlayFile) {
-      cmd.push('-i', overlayName);
-      cmd.push('-filter_complex', '[0:v][1:v]overlay=0:0:format=auto');
-      cmd.push('-map', '0:v:0', '-map', '0:a?', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '23', '-preset', 'ultrafast', '-c:a', 'copy');
+      cmd.push('-i', overlayName, '-filter_complex', '[0:v][1:v]overlay=0:0:format=auto', 
+               '-map', '0:v:0', '-map', '0:a?', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '23', '-preset', 'ultrafast', '-c:a', 'copy');
     } else {
       cmd.push('-c', 'copy');
     }
-    
-    if (needDate && date) {
-      cmd.push('-metadata', `creation_time=${date.toISOString()}`);
-    }
+
+    if (needDate && date) cmd.push('-metadata', `creation_time=${date.toISOString()}`);
     if (needLoc) {
       const lat = meta.latitude >= 0 ? `+${meta.latitude.toFixed(4)}` : `${meta.latitude.toFixed(4)}`;
       const lon = meta.longitude >= 0 ? `+${meta.longitude.toFixed(4)}` : `${meta.longitude.toFixed(4)}`;
-      cmd.push('-metadata', `location=${lat}${lon}/`, '-metadata', `location-eng=${lat}${lon}/`);
+      cmd.push('-metadata', `location=${lat}${lon}/`);
     }
-    
     cmd.push(outName);
-    
-    // Log für das AKTUELLE Video mit der festen ID 'current_video'
-    addLog(`⏳ Verarbeite Video ${mainFile.name}...`, 'info', 'current_video');
-    
+
     const exitCode = await ffmpeg.exec(cmd);
-    if (exitCode !== 0) {
-      const logText = errorLogBuffer.join('\n');
-      
-      if (logText.includes('Invalid data found') || logText.includes('moov atom not found')) {
-        throw new Error("Video-Datei ist korrupt/unlesbar");
-      }
-      
-      // Für alle anderen Fehler:
-      throw new Error(`Verarbeitungsfehler (Code ${exitCode})`);
-      console.error(`\n❌ === FFMPEG LOG FÜR ABGESTÜRZTES VIDEO: ${mainFile.name} ===`);
-      console.error(errorLogBuffer.join('\n'));
-      console.error(`========================================================\n`);
-    }
-    
+    if (exitCode !== 0) throw new Error(`FFmpeg Fehler Code ${exitCode}`);
+
     const data = await ffmpeg.readFile(outName);
     return new File([data.buffer], mainFile.name, { type: mainFile.type });
+
   } finally {
-    // ZWINGEND ERFORDERLICH: Der finally-Block garantiert, dass der 
-    // erzeugte C++/WASM-Hintergrundprozess und dessen zugewiesener RAM 
-    // IMMER komplett gelöscht werden - auch wenn ein Video defekt ist 
-    // oder die Verarbeitung abbricht!
-    ffmpeg.terminate();
+    const filesToDelete = [mainName, overlayName, outName];
+    for (const f of filesToDelete) {
+      try {
+        await ffmpeg.deleteFile(f);
+      } catch (e) {
+        console.error(`Fehler beim Löschen von ${f} aus virtuellem FS:`, e);
+      }
+    }
   }
 }
 
@@ -726,6 +721,40 @@ function addLog(msg, type = 'info', id = null) {
   
   statusLog.push({ msg, type, id });
   updateStatus();
+}
+
+async function processAndZip(mid, files, zip, history) {
+  const meta = history[mid];
+  const mainFile = files.main;
+  
+  try {
+    const processedFile = await processMediaGroup(files, meta);
+    const filename = `${mainFile.info.prefix}_${mid}.${mainFile.info.ext}`;
+    zip.file(filename, processedFile, { compression: "STORE" }); // Quick Win: Kein Re-Compress
+  } catch (e) {
+    addLog(`❌ Fehler bei ${mainFile.file.name}: ${e.message}`, 'error');
+  } finally {
+    processedFile = null;
+  }
+}
+
+async function asyncPool(iterable, iteratorFn, concurrencyLimit) {
+  const result = [];
+  const executing = new Set();
+
+  for (const item of iterable) {
+    const p = Promise.resolve().then(() => iteratorFn(item));
+    result.push(p);
+    executing.add(p);
+
+    const clean = () => executing.delete(p);
+    p.then(clean).catch(clean);
+
+    if (executing.size >= concurrencyLimit) {
+      await Promise.race(executing);
+    }
+  }
+  return Promise.all(result);
 }
 
 /**
