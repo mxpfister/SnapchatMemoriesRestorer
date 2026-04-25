@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Snapchat Memories Restorer - Verarbeite deine Snapchat-Erinnerungen privat im Browser">
+    <meta name="theme-color" content="#ffffff">
+    <title>Snapchat Memories Restorer</title>
+    <style>
+        :root {
+            --c-bg: #f5f5f7;
+            --c-surface: #ffffff;
+            --c-text: #1d1d1f;
+            --c-muted: #86868b;
+            --c-border: rgba(0, 0, 0, 0.08);
+            
+            --c-accent: #000000;
+            --c-accent-hover: #333333;
+            
+            --c-success: #34c759;
+            --c-error: #ff3b30;
+            
+            --radius-lg: 24px;
+            --radius-md: 14px;
+            --radius-sm: 8px;
+            --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+            --shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.08);
+        }
+
+        /* Automatischer Dark Mode */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --c-bg: #000000;
+                --c-surface: #1c1c1e;
+                --c-text: #f5f5f7;
+                --c-muted: #86868b;
+                --c-border: rgba(255, 255, 255, 0.1);
+                
+                --c-accent: #ffffff;
+                --c-accent-hover: #e5e5ea;
+                
+                --c-success: #32d74b;
+                --c-error: #ff453a;
+                
+                --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+                --shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.6);
+            }
+        }
+
+        /* Reset & Base */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: var(--font);
+            background: var(--c-bg);
+            color: var(--c-text);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            min-height: 100vh;
+        }
+        
+        /* Typography */
+        h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            letter-spacing: -0.04em;
+            margin-bottom: 0.5rem;
+            line-height: 1.1;
+        }
+        
+        h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.5rem;
+        }
+        
+        p {
+            color: var(--c-muted);
+            font-size: 0.95rem;
+        }
+
+        main {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 4rem 2rem;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+        
+        .header-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--c-surface);
+            border: 1px solid var(--c-border);
+            padding: 0.5rem 1.25rem;
+            border-radius: 99px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow);
+            color: var(--c-text);
+        }
+
+        /* Bento Grid */
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .bento-card {
+            background: var(--c-surface);
+            border-radius: var(--radius-lg);
+            padding: 2.5rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--c-border);
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
+        }
+        
+        .bento-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-hover);
+        }
+        
+        .bento-card--large {
+            grid-column: span 2;
+        }
+        
+        @media (max-width: 768px) {
+            .bento-card--large {
+                grid-column: span 1;
+            }
+            h1 {
+                font-size: 2.5rem;
+            }
+        }
+
+        .card-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        /* Upload Zone */
+        .upload-zone {
+            border: 2px dashed var(--c-border);
+            border-radius: var(--radius-md);
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 1.5rem;
+            background: var(--c-bg);
+        }
+        
+        .upload-zone:hover, .upload-zone:focus-within {
+            border-color: var(--c-muted);
+            background: var(--c-surface);
+            outline: none;
+        }
+        
+        .upload-zone:focus-visible {
+            border: 2px solid var(--c-accent);
+        }
+
+        .upload-zone.dragover {
+            border-color: var(--c-accent);
+            background: var(--c-surface);
+            transform: scale(1.02);
+            border-style: solid;
+        }
+        
+        .upload-zone input {
+            display: none;
+        }
+        
+        .upload-zone strong {
+            color: var(--c-text);
+            display: block;
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+            font-size: 1rem;
+        }
+        
+        .upload-zone span {
+            font-size: 0.85rem;
+            color: var(--c-muted);
+        }
+
+        /* Lists */
+        .file-list {
+            margin-top: 1rem;
+            max-height: 140px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .file-list--empty {
+            display: none;
+        }
+        
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            background: var(--c-bg);
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            border: 1px solid var(--c-border);
+        }
+        
+        .file-item__name {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-right: 1rem;
+            color: var(--c-text);
+            font-weight: 500;
+        }
+        
+        .file-item__size {
+            color: var(--c-muted);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Buttons & Actions */
+        .actions {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 1rem;
+            margin-top: auto;
+            padding-top: 2rem;
+        }
+        
+        @media (max-width: 600px) {
+            .actions {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 1rem 1.5rem;
+            border-radius: 99px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            border: none;
+            font-family: inherit;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            text-decoration: none;
+        }
+        
+        .btn-primary {
+            background: var(--c-accent);
+            color: var(--c-bg);
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            background: var(--c-accent-hover);
+            transform: scale(1.02);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+        }
+        
+        .btn-primary:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+        
+        .btn-primary:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .btn-secondary {
+            background: transparent;
+            color: var(--c-text);
+            border: 1px solid var(--c-border);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--c-border);
+        }
+
+        /* Status & Progress */
+        .progress-section {
+            display: none;
+            margin: 1.5rem 0;
+            background: var(--c-bg);
+            padding: 1.5rem;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--c-border);
+        }
+        
+        .progress-section--visible {
+            display: block;
+        }
+        
+        .progress-bar {
+            height: 8px;
+            background: var(--c-border);
+            border-radius: 99px;
+            overflow: hidden;
+            margin-bottom: 0.75rem;
+        }
+        
+        .progress-bar__fill {
+            height: 100%;
+            background: var(--c-accent);
+            width: 0%;
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .progress-text {
+            font-size: 0.85rem;
+            color: var(--c-text);
+            text-align: right;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .status-box {
+            display: none;
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: var(--c-bg);
+            border-radius: var(--radius-sm);
+            font-size: 0.8rem;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid var(--c-border);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            line-height: 1.6;
+        }
+        
+        .status-box--visible {
+            display: block;
+        }
+        
+        .status-item {
+            padding: 0.25rem 0;
+            color: var(--c-text);
+        }
+        
+        .status-item--ok {
+            color: var(--c-success);
+        }
+        
+        .status-item--error {
+            color: var(--c-error);
+        }
+
+        /* Accessibility Skip Link */
+        .skip-link {
+            position: absolute;
+            top: -100px;
+            left: 0;
+            background: var(--c-accent);
+            color: var(--c-bg);
+            padding: 1rem;
+            z-index: 100;
+            transition: top 0.2s;
+            text-decoration: none;
+            border-radius: 0 0 8px 0;
+            font-weight: 600;
+        }
+        
+        .skip-link:focus {
+            top: 0;
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--c-border); 
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--c-muted); 
+        }
+    </style>
+    <script src="coi-serviceworker.js"></script>
+</head>
+<body>
+    <a href="#main" class="skip-link">Zum Hauptinhalt springen</a>
+    
+    <main id="main">
+        <header class="header">
+            <div class="header-badge">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                <span>Lokal & Privat</span>
+            </div>
+            <h1>Memories Restorer</h1>
+            <p>Exportiere deine Snapchat Fotos & Videos originalgetreu.</p>
+        </header>
+
+        <div class="bento-grid">
+            <!-- Was bringt mir das? (Problemerklärung für Nicht-ITler) -->
+            <section class="bento-card bento-card--large">
+                <h2 style="font-size: 1.2rem; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <span>💡</span> Warum brauche ich dieses Tool?
+                </h2>
+                <p style="margin: 0; font-size: 0.95rem; opacity: 0.9; line-height: 1.5;">
+                    Der offizielle Snapchat-Export liefert unfertige Dateien: Filter sind vom Bild getrennt, und das Aufnahmedatum fehlt. Ohne Anpassung herrscht auf deinem Handy das reinste Datei-Chaos. Dieses Tool repariert alles vollautomatisch:
+                </p>
+                <ul style="margin: 0.8rem 0 0 0; padding-left: 1.2rem; font-size: 0.95rem; opacity: 0.9; line-height: 1.5;">
+                    <li style="margin-bottom: 0.4rem;"><strong>✨ Filter einbacken:</strong> Texte und Sticker werden fest in Fotos/Videos eingefügt.</li>
+                    <li style="margin-bottom: 0.4rem;"><strong>🗓️ Korrektes Datum:</strong> Original-Datum & GPS werden ergänzt. Deine Handy-Galerie sortiert alles perfekt ein!</li>
+                    <li><strong>🔐 100% Privat:</strong> Die Verarbeitung läuft rein lokal in deinem Browser. Nichts wird hochgeladen!</li>
+                </ul>
+            </section>
+
+            <!-- Info: Wie komme ich an die Daten? -->
+            <section class="bento-card bento-card--large" style="background: var(--c-surface); border: 1px dashed var(--c-accent);">
+                <div class="card-icon" style="color: var(--c-accent)">ℹ️</div>
+                <h2 style="font-size: 1.1rem; margin-bottom: 0.5rem;">Wie erhalte ich meinen Snapchat-Export?</h2>
+                <p style="margin: 0; font-size: 0.95rem; opacity: 0.9;">
+                    Gehe in der <strong>Snapchat App</strong> auf dein Profil &rarr; <strong>Einstellungen</strong> &rarr; <strong>Meine Daten</strong>.
+                    <br>Wähle unten unbedingt <strong>"Deine Memorys exportieren"</strong> und <strong>"JSON-Dateien exportieren"</strong> aus!
+                    Streiche beim Kalender über den <em>gesamten Zeitraum</em> und sende die Anfrage ab.
+                </p>
+            </section>
+
+            <!-- Step 1: Upload -->
+            <section class="bento-card bento-card--large">
+                <div class="card-icon">📁</div>
+                <h2>1. Snapchat Ordner auswählen</h2>
+                <p>Wähle deinen kompletten, entpackten Snapchat-Export-Ordner aus (z.B. <code>mydata~...</code>). Die App findet die <code>memories_history.json</code> und die Mediadateien ganz automatisch!</p>
+                
+                <div class="upload-zone" id="folderZone" tabindex="0" role="button" aria-label="Ordner hochladen">
+                    <strong>Export-Ordner auswählen</strong>
+                    <span>Klicke hier oder ziehe den gesamten Ordner hinein</span>
+                    <input type="file" id="folderInput" webkitdirectory directory multiple tabindex="-1" />
+                </div>
+                <div class="file-list file-list--empty" id="folderList" role="status"></div>
+            </section>
+
+            <!-- Processing Output -->
+            <section class="bento-card bento-card--large">
+                <div class="card-icon">⚡️</div>
+                <h2>2. Verarbeitung</h2>
+                <p>Dateien werden abgeglichen und Metadaten (Datum & GPS) werden auf die Fotos geschrieben. Du erhältst ein vollständiges ZIP-Archiv.</p>
+
+                <div class="progress-section" id="progressSection" role="region" aria-label="Fortschritt">
+                    <div class="progress-bar">
+                        <div class="progress-bar__fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-text" id="progressText">0%</div>
+                </div>
+                
+                <div class="status-box" id="statusBox" role="log" aria-live="polite"></div>
+
+                <div class="actions">
+                    <button class="btn btn-secondary" id="clearBtn">Zurücksetzen</button>
+                    <button class="btn btn-primary" id="processBtn" disabled>Verarbeitung starten</button>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer style="text-align: center; margin-top: 3rem; padding: 2rem 1rem; color: var(--c-muted); font-size: 0.85rem; border-top: 1px solid var(--c-surface);">
+        <p><strong>🔒 100% Privat & Lokal:</strong> Deine Dateien verlassen niemals dein Gerät. Die gesamte Verarbeitung findet in deinem Browser statt. Es werden keine Daten auf einen Server geladen.</p>
+        <p style="margin-top: 1rem; opacity: 0.8;">Beim Aufruf der Seite werden technisch bedingt IP-Adressen vom Hosting-Provider verarbeitet.</p>
+        <div style="margin-top: 1.5rem; display: flex; justify-content: center; gap: 1.5rem;">
+            <a href="https://max-pfister.me/impressum" target="_blank" rel="noopener noreferrer" style="color: var(--c-accent); text-decoration: underline;">Impressum</a>
+            <a href="https://max-pfister.me/datenschutz" target="_blank" rel="noopener noreferrer" style="color: var(--c-accent); text-decoration: underline;">Datenschutz</a>
+        </div>
+    </footer>
+
+    <!-- Dependencies (Komplett Lokal, 0 externe Anfragen, 0 Cookies) -->
+    <script src="vendor/jszip.min.js"></script>
+    <script src="vendor/piexif.min.js"></script>
+    <!-- EXIF & Media Reader -->
+    <script src="vendor/exifr.umd.js"></script>
+    <!-- FFmpeg WASM v0.12 Single-Threaded -->
+    <script src="vendor/ffmpeg.js"></script>
+    <script src="vendor/ffmpeg-util.js"></script>
+    <script src="app.js" defer></script>
+</body>
+</html>
