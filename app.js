@@ -295,15 +295,16 @@ async function handleProcess() {
       updateProgress(processed, mediaMap.size);
     }
 
-    // Löscht den "⏳ Verarbeite Video..." Dummy aus der Liste, wenn alles fertig ist
     statusLog = statusLog.filter(item => item.id !== 'current_video');
     updateStatus();
 
-    if (processedImagesCount > 0) {
-      addLog(`✅ Alle ${processedImagesCount} Bilddateien wurden verarbeitet`, 'ok');
-    }
-    if (processedVideosCount > 0) {
-      addLog(`✅ Alle ${processedVideosCount} Videodateien wurden verarbeitet`, 'ok');
+    const totalSuccess = processedImagesCount + processedVideosCount;
+    
+    if (totalSuccess === mediaMap.size) {
+      addLog(`✅ Alle ${mediaMap.size} Memories (${processedImagesCount} Bilder, ${processedVideosCount} Videos) erfolgreich verarbeitet!`, 'ok');
+    } else {
+      const failedCount = mediaMap.size - totalSuccess;
+      addLog(`⚠️ Verarbeitung fertig: ${totalSuccess} erfolgreich, ${failedCount} übersprungen/fehlerhaft.`, 'error');
     }
 
     addLog('📦 Erstelle ZIP-Archiv, bitte einen Moment Geduld...', 'ok');
