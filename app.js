@@ -601,6 +601,9 @@ async function processVideoWithFFmpeg(mainFile, overlayFile, needDate, needLoc, 
   const outName = 'output_final.mp4';
 
   currentProcessingName = mainFile.name;
+  const errorLogBuffer = [];
+  const logHandler = ({ message }) => errorLogBuffer.push(message);
+  ffmpeg.on('log', logHandler);
 
   try {
     await ffmpeg.writeFile(mainName, await fetchFile(mainFile));
@@ -625,12 +628,19 @@ async function processVideoWithFFmpeg(mainFile, overlayFile, needDate, needLoc, 
     cmd.push(outName);
 
     const exitCode = await ffmpeg.exec(cmd);
-    if (exitCode !== 0) throw new Error(`FFmpeg Fehler Code ${exitCode}`);
+    if (exitCode !== 0) {
+      const logText = errorLogBuffer.join('\n');
+      if (logText.includes('Invalid data found') || logText.includes('moov atom not found')) {
+        throw new Error("Video-Datei ist korrupt/unlesbar");
+      }
+      throw new Error(`FFmpeg Fehler Code ${exitCode}`);
+    }
 
     const data = await ffmpeg.readFile(outName);
     return new File([data.buffer], mainFile.name, { type: mainFile.type });
 
   } finally {
+    ffmpeg.off('log', logHandler);
     const filesToDelete = [mainName, overlayName, outName];
     for (const f of filesToDelete) {
       try {
