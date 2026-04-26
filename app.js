@@ -197,6 +197,7 @@ let statusLog = [];
 let isScanning = false;
 let isAborted = false;
 let uploadSources = [];
+let wakeLockSentinel = null;
 
 // DOM Elements
 const folderZone = document.getElementById('folderZone');
@@ -239,6 +240,37 @@ async function getFFmpeg() {
 }
 
 /**
+ * Request wake lock to prevent screen from locking during processing
+ */
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) {
+    console.warn('Screen Wake Lock API not supported in this browser');
+    return;
+  }
+  try {
+    wakeLockSentinel = await navigator.wakeLock.request('screen');
+    console.log('Screen wake lock acquired');
+  } catch (err) {
+    console.warn('Failed to acquire wake lock:', err);
+  }
+}
+
+/**
+ * Release wake lock after processing is complete
+ */
+async function releaseWakeLock() {
+  if (wakeLockSentinel !== null) {
+    try {
+      await wakeLockSentinel.release();
+      console.log('Screen wake lock released');
+    } catch (err) {
+      console.warn('Failed to release wake lock:', err);
+    }
+    wakeLockSentinel = null;
+  }
+}
+
+/**
  * Initialize event listeners
  */
 function initEventListeners() {
@@ -259,6 +291,13 @@ function initEventListeners() {
   folderZone.addEventListener('keydown', (e) => {
     if ((e.key === 'Enter' || e.key === ' ') && !isScanning) {
       folderInput.click();
+    }
+  });
+
+  // Re-request wake lock if page becomes visible during processing
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && (!isAborted || wakeLockSentinel)) {
+      await requestWakeLock();
     }
   });
 
@@ -464,6 +503,7 @@ function updateUI() {
  */
 function handleClear() {
   isAborted = true; // Signal active runs to stop
+  releaseWakeLock().catch(e => console.warn('Error releasing wake lock:', e));
   if (ffmpegInstance) {
     try {
       ffmpegInstance.terminate(); // Force kill running FFmpeg
@@ -669,6 +709,8 @@ async function handleProcess() {
   statusLog = [];
   progressSection.classList.add('progress-section--visible');
   processBtn.disabled = true;
+  
+  await requestWakeLock();
   
   let writableStream = null;
   let fileHandle = null;
@@ -910,6 +952,8 @@ async function handleProcess() {
       console.error(e);
     }
   } finally {
+    await releaseWakeLock();
+    
     if (ffmpegInstance) {
       try {
         await ffmpegInstance.terminate();
