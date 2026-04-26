@@ -410,25 +410,6 @@
             border-color: var(--c-accent);
         }
 
-        /* Accessibility Skip Link */
-        .skip-link {
-            position: absolute;
-            top: -100px;
-            left: 0;
-            background: var(--c-accent);
-            color: var(--c-bg);
-            padding: 1rem;
-            z-index: 100;
-            transition: top 0.2s;
-            text-decoration: none;
-            border-radius: 0 0 8px 0;
-            font-weight: 600;
-        }
-        
-        .skip-link:focus {
-            top: 0;
-        }
-        
         /* Custom Scrollbar */
         ::-webkit-scrollbar {
             width: 8px;
@@ -448,8 +429,6 @@
     <script src="coi-serviceworker.js"></script>
 </head>
 <body>
-    <a href="#main" class="skip-link">Skip to main content</a>
-    
     <main id="main">
         <div class="lang-switcher">
             <button id="langEnBtn" class="lang-btn active" aria-pressed="true">English</button>

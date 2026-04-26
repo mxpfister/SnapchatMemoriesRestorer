@@ -112,7 +112,7 @@ const i18n = {
     
     // How to get Snapchat export
     howToGetTitle: 'Wie erhalte ich meinen Snapchat-Export?',
-    howToGetText: 'Gehe in der <strong>Snapchat App</strong> auf dein Profil &rarr; <strong>Einstellungen</strong> &rarr; <strong>Meine Daten</strong>. Wähle unten unbedingt <strong>"Deine Memorys exportieren"</strong> und <strong>"JSON-Dateien exportieren"</strong> aus! Streiche beim Kalender über den <em>gesamten Zeitraum</em> und sende die Anfrage ab.<br><br><strong>💡 Große Exporte:</strong> Falls Snapchat dir mehrere ZIP-Dateien sendet (für Exporte >2GB), lade einfach alle Ordner hoch – dieses Tool führt sie automatisch zusammen!',
+    howToGetText: 'Gehe in der <strong>Snapchat App</strong> auf dein Profil &rarr; <strong>Einstellungen</strong> &rarr; <strong>Meine Daten</strong>. Wähle unten unbedingt <strong>"Deine Memorys exportieren"</strong> und <strong>"JSON-Dateien exportieren"</strong> aus! Wähle beim Kalender den <em>gesamten Zeitraum</em> aus und sende die Anfrage ab.<br><br><strong>💡 Große Exporte:</strong> Falls Snapchat dir mehrere ZIP-Dateien sendet (für Exporte >2GB), lade einfach alle Ordner hoch – dieses Tool führt sie automatisch zusammen!',
     
     // Step 1
     step1Title: '1. Snapchat Ordner auswählen',
@@ -559,11 +559,6 @@ function updatePageLanguage() {
   // Update compatibility warning heading
   const compatWarningH3 = document.querySelector('#compatWarning h3');
   if (compatWarningH3) compatWarningH3.textContent = currentLanguage === 'de' ? '⚠️ Wichtige Systemanforderungen' : '⚠️ Important System Requirements';
-  
-  // Update skip link
-  const skipLink = document.querySelector('.skip-link');
-  if (skipLink) skipLink.textContent = currentLanguage === 'de' ? 'Zum Hauptinhalt springen' : 'Skip to main content';
-  
   // Update section headings and descriptions - Why use this tool
   // Find the section with 💡 in the h2
   const allSections = document.querySelectorAll('section');
