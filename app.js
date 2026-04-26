@@ -26,11 +26,11 @@ const i18n = {
     
     // How to get Snapchat export
     howToGetTitle: 'How do I get my Snapchat export?',
-    howToGetText: 'In the <strong>Snapchat app</strong> go to your profile &rarr; <strong>Settings</strong> &rarr; <strong>My Data</strong>. Be sure to select <strong>"Export your Memories"</strong> and <strong>"Export JSON files"</strong> at the bottom! Swipe through the <em>entire time period</em> on the calendar and submit the request.',
+    howToGetText: 'In the <strong>Snapchat app</strong> go to your profile &rarr; <strong>Settings</strong> &rarr; <strong>My Data</strong>. Be sure to select <strong>"Export your Memories"</strong> and <strong>"Export JSON files"</strong> at the bottom! Swipe through the <em>entire time period</em> on the calendar and submit the request.<br><br><strong>💡 Large exports:</strong> If Snapchat sends you multiple ZIP files (for exports >2GB), simply upload all folders - this tool automatically merges them!',
     
     // Step 1
     step1Title: '1. Select Snapchat folder',
-    step1Description: 'Select your complete, unzipped Snapchat export folder (e.g. <code>mydata~...</code>). The app automatically finds the <code>memories_history.json</code> and media files!',
+    step1Description: 'Select your complete, unzipped Snapchat export folder (e.g. <code>mydata~...</code>) or the <code>memories</code> folder from a split export. The app automatically merges multiple uploads and finds all metadata!',
     selectFolder: 'Select export folder',
     dragFolder: 'Click here or drag the entire folder in',
     
@@ -112,11 +112,11 @@ const i18n = {
     
     // How to get Snapchat export
     howToGetTitle: 'Wie erhalte ich meinen Snapchat-Export?',
-    howToGetText: 'Gehe in der <strong>Snapchat App</strong> auf dein Profil &rarr; <strong>Einstellungen</strong> &rarr; <strong>Meine Daten</strong>. Wähle unten unbedingt <strong>"Deine Memorys exportieren"</strong> und <strong>"JSON-Dateien exportieren"</strong> aus! Streiche beim Kalender über den <em>gesamten Zeitraum</em> und sende die Anfrage ab.',
+    howToGetText: 'Gehe in der <strong>Snapchat App</strong> auf dein Profil &rarr; <strong>Einstellungen</strong> &rarr; <strong>Meine Daten</strong>. Wähle unten unbedingt <strong>"Deine Memorys exportieren"</strong> und <strong>"JSON-Dateien exportieren"</strong> aus! Streiche beim Kalender über den <em>gesamten Zeitraum</em> und sende die Anfrage ab.<br><br><strong>💡 Große Exporte:</strong> Falls Snapchat dir mehrere ZIP-Dateien sendet (für Exporte >2GB), lade einfach alle Ordner hoch – dieses Tool führt sie automatisch zusammen!',
     
     // Step 1
     step1Title: '1. Snapchat Ordner auswählen',
-    step1Description: 'Wähle deinen kompletten, entpackten Snapchat-Export-Ordner aus (z.B. <code>mydata~...</code>). Die App findet die <code>memories_history.json</code> und die Mediadateien ganz automatisch!',
+    step1Description: 'Wähle deinen kompletten, entpackten Snapchat-Export-Ordner (z.B. <code>mydata~...</code>) oder den <code>memories</code> Ordner aus einem Split-Export. Die App vereinigt mehrere Uploads automatisch und findet alle Metadaten!',
     selectFolder: 'Export-Ordner auswählen',
     dragFolder: 'Klicke hier oder ziehe den gesamten Ordner hinein',
     
@@ -196,6 +196,7 @@ let mediaFiles = [];
 let statusLog = [];
 let isScanning = false;
 let isAborted = false;
+let uploadSources = [];
 
 // DOM Elements
 const folderZone = document.getElementById('folderZone');
@@ -388,6 +389,8 @@ async function handleFolderDrop(e) {
  */
 async function scanFiles(filesArray) {
   const mediaMap = new Map();
+  const jsonFiles = [];
+  const foundMemoriesDir = filesArray.some(f => f.webkitRelativePath?.includes('memories/'));
   
   for (let f of mediaFiles) {
       mediaMap.set(f.name + '_' + f.size, f);
@@ -397,7 +400,11 @@ async function scanFiles(filesArray) {
     const name = file.name.toLowerCase();
     
     if (name === 'memories_history.json') {
-      jsonFile = file;
+      jsonFiles.push(file);
+      if (!jsonFile) {
+        jsonFile = file;
+        uploadSources.push('json');
+      }
     } else {
       const ext = name.split('.').pop();
       if (IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext)) {
@@ -407,6 +414,11 @@ async function scanFiles(filesArray) {
         }
       }
     }
+  }
+  
+  // Track if memories folder was found (for multi-ZIP support)
+  if (foundMemoriesDir && !uploadSources.includes('memories')) {
+    uploadSources.push('memories');
   }
   
   mediaFiles = Array.from(mediaMap.values());
@@ -423,6 +435,12 @@ function updateUI() {
     folderList.classList.add('file-list--empty');
   } else {
     folderList.classList.remove('file-list--empty');
+    
+    // Show multi-ZIP merge info
+    if (uploadSources.length > 1) {
+      const sourceText = uploadSources.join(' + ');
+      folderList.innerHTML += `<div class="file-item"><span class="file-item__name" style="color: #34c759;">✨ ${currentLanguage === 'de' ? 'Mehrere Exports zusammengefügt' : 'Multiple exports merged'} (${sourceText})</span></div>`;
+    }
     
     if (jsonFile) {
         folderList.innerHTML += `<div class="file-item"><span class="file-item__name">${currentLanguage === 'de' ? '✅ memories_history.json gefunden' : '✅ memories_history.json found'}</span><span class="file-item__size">${formatBytes(jsonFile.size)}</span></div>`;
@@ -456,6 +474,7 @@ function handleClear() {
   jsonFile = null;
   mediaFiles = [];
   statusLog = [];
+  uploadSources = [];
   ffmpegLoadError = null; // Reset FFmpeg error state text
   folderList.classList.add('file-list--empty');
   statusBox.classList.remove('status-box--visible');
