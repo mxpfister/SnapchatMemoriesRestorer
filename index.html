@@ -452,8 +452,8 @@
     
     <main id="main">
         <div class="lang-switcher">
-            <button id="langEnBtn" class="lang-btn active">English</button>
-            <button id="langDeBtn" class="lang-btn">Deutsch</button>
+            <button id="langEnBtn" class="lang-btn active" aria-pressed="true">English</button>
+            <button id="langDeBtn" class="lang-btn" aria-pressed="false">Deutsch</button>
         </div>
         
         <header class="header">
@@ -522,7 +522,7 @@
 
                 <div class="progress-section" id="progressSection" role="region" aria-label="Fortschritt">
                     <div class="progress-bar">
-                        <div class="progress-bar__fill" id="progressFill"></div>
+                        <div class="progress-bar__fill" id="progressFill" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Fortschritt"></div>
                     </div>
                     <div class="progress-text" id="progressText">0%</div>
                 </div>

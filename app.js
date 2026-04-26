@@ -515,9 +515,11 @@ function setLanguage(lang) {
   const langDeBtn = document.getElementById('langDeBtn');
   if (langEnBtn) {
     langEnBtn.classList.toggle('active', lang === 'en');
+    langEnBtn.setAttribute('aria-pressed', lang === 'en' ? 'true' : 'false');
   }
   if (langDeBtn) {
     langDeBtn.classList.toggle('active', lang === 'de');
+    langDeBtn.setAttribute('aria-pressed', lang === 'de' ? 'true' : 'false');
   }
   
   updateCompatibilityWarning();
@@ -774,7 +776,7 @@ async function handleProcess() {
 
       addLog(t('fileSaved'), 'ok');
     } else {
-      const TARGET_CHUNK_BYTES = 2000 * 1000 * 1000; // 2 Gigabyte
+      const TARGET_CHUNK_BYTES = 1500 * 1000 * 1000; // ~1,5 GB
       const memoryChunks = [];
       let currentChunk = [];
       let currentChunkSize = 0;
@@ -1319,6 +1321,8 @@ function updateStatus() {
 function updateProgress(current, total) {
   const percent = Math.round((current / total) * 100);
   progressFill.style.width = percent + '%';
+  progressFill.setAttribute('aria-valuemin', '0');
+  progressFill.setAttribute('aria-valuemax', '100');
   progressFill.setAttribute('aria-valuenow', percent);
   progressText.textContent = `${percent}%`;
 }
