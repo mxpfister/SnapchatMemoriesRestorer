@@ -56,7 +56,7 @@ const i18n = {
     packingFiles: 'Now packing all finished files into a single ZIP archive. This may take a moment...',
     allComplete: 'Done! All files processed and downloaded.',
     streamingFiles: 'Saving finished files live & step-by-step to your file...',
-    chunking: 'For memory protection, files are being split into {parts} smaller ZIP packages (max. ~2.5GB).',
+    chunking: 'For memory protection, files are being split into {parts} smaller ZIP packages (max. ~1.5GB).',
     
     // Warnings & Info
     uploadHint: 'Note: Files are bundled at the end of processing.',
@@ -142,7 +142,7 @@ const i18n = {
     packingFiles: 'Packe nun alle fertigen Dateien in ein einzelnes ZIP-Archiv. Das kann kurz dauern...',
     allComplete: 'Fertig! Alle Dateien verarbeitet und heruntergeladen.',
     streamingFiles: 'Speichere fertige Dateien live & Schritt-für-Schritt in deine Datei...',
-    chunking: 'Zum Speicherschutz werden die Dateien in {parts} kleinere ZIP-Pakete (max. ~2.5GB) aufgeteilt.',
+    chunking: 'Zum Speicherschutz werden die Dateien in {parts} kleinere ZIP-Pakete (max. ~1.5GB) aufgeteilt.',
     
     // Warnings & Info
     uploadHint: 'Hinweis: Dateien werden erst am Ende der Verarbeitung gebündelt heruntergeladen.',
@@ -732,14 +732,29 @@ async function handleProcess() {
 
       if (videoGroups.length > 0) {
         addLog(t('processingVideos'));
-        await getFFmpeg(); 
         
-        await asyncPool(videoGroups, async ([mid, files]) => {
-          await processAndZip(mid, files, zip, history);
-          globalProcessed++;
-          updateProgress(globalProcessed, totalToProcess);
-        }, 1);
-      }
+        let videoCounter = 0;
+        const RESET_THRESHOLD = 10;
+
+        for (const group of videoGroups) {
+            if (isAborted) break;
+
+            if (videoCounter > 0 && videoCounter % RESET_THRESHOLD === 0) {
+                if (ffmpegInstance) {
+                    console.log('Resetting FFmpeg to prevent memory issues...');
+                    await ffmpegInstance.terminate();
+                    ffmpegInstance = null;
+                }
+            }
+
+            const [mid, files] = group;
+            await processAndZip(mid, files, zip, history);
+            
+            globalProcessed++;
+            updateProgress(globalProcessed, totalToProcess);
+            videoCounter++;
+        }
+    }
 
       statusLog = statusLog.filter(item => item.id !== 'current_video');
       updateStatus();
@@ -821,17 +836,33 @@ async function handleProcess() {
             await processAndZip(mid, files, chunkZip, history);
             globalProcessed++;
             updateProgress(globalProcessed, totalToProcess);
-          }, 4);
+          }, 2);
         }
         
         if (cVideos.length > 0) {
-          addLog(t('processingVideosPart', { part: partNumber, total: totalParts }));
-          await getFFmpeg();
-          await asyncPool(cVideos, async ([mid, files]) => {
-            await processAndZip(mid, files, chunkZip, history);
-            globalProcessed++;
-            updateProgress(globalProcessed, totalToProcess);
-          }, 1);
+            addLog(t('processingVideosPart', { part: partNumber, total: totalParts }));
+            
+            let chunkVideoCounter = 0;
+            const CHUNK_RESET_LIMIT = 5;
+
+            for (const group of cVideos) {
+                if (isAborted) break;
+
+                if (chunkVideoCounter > 0 && chunkVideoCounter % CHUNK_RESET_LIMIT === 0) {
+                    if (ffmpegInstance) {
+                        console.log('Resetting FFmpeg for memory protection between video chunks...');
+                        await ffmpegInstance.terminate();
+                        ffmpegInstance = null;
+                    }
+                }
+
+                const [mid, files] = group;
+                await processAndZip(mid, files, chunkZip, history);
+                
+                globalProcessed++;
+                updateProgress(globalProcessed, totalToProcess);
+                chunkVideoCounter++;
+            }
         }
         
         statusLog = statusLog.filter(item => item.id !== 'current_video');
@@ -1169,13 +1200,13 @@ async function processVideoWithFFmpeg(mainFile, overlayFile, needDate, needLoc, 
 
   } finally {
     ffmpeg.off('log', logHandler);
-    const filesToDelete = [mainName, overlayName, outName];
-    for (const f of filesToDelete) {
-      try {
-        await ffmpeg.deleteFile(f);
-      } catch (e) {
-        console.error(`${currentLanguage === 'de' ? 'Fehler beim Löschen von' : 'Error deleting'} ${f} ${currentLanguage === 'de' ? 'aus virtuellem FS' : 'from virtual FS'}:`, e);
-      }
+    const files = await ffmpeg.listDir('/'); 
+    try {
+        for (const file of files) {
+            if (!file.isDir) await ffmpeg.deleteFile(file.name);
+        }
+    } catch (e) {
+    console.error(`${currentLanguage === 'de' ? 'Fehler beim Löschen von' : 'Error deleting'} ${f} ${currentLanguage === 'de' ? 'aus virtuellem FS' : 'from virtual FS'}:`, e);
     }
   }
 }
