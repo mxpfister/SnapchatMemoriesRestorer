@@ -1218,23 +1218,24 @@ async function processVideoWithFFmpeg(mainFile, overlayFile, needDate, needLoc, 
   const outName = 'output_final.mp4';
 
   currentProcessingName = mainFile.name;
-  const errorLogBuffer = [];
-  const logHandler = ({ message }) => errorLogBuffer.push(message);
-  ffmpeg.on('log', logHandler);
 
   try {
     await ffmpeg.writeFile(mainName, await fetchFile(mainFile));
-    if (overlayFile) {
-      await ffmpeg.writeFile(overlayName, await fetchFile(overlayFile));
-    }
 
     let cmd = ['-y', '-i', mainName];
+
     if (overlayFile) {
-      cmd.push('-i', overlayName, '-filter_complex', '[0:v][1:v]overlay=0:0:format=auto', 
-               '-map', '0:v:0', '-map', '0:a?', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '23', '-preset', 'ultrafast', '-c:a', 'copy');
+      await ffmpeg.writeFile(overlayName, await fetchFile(overlayFile));
+      cmd.push('-i', overlayName);
+      
+      cmd.push('-filter_complex', '[1:v][0:v]scale2ref=w=iw:h=ih[ovrl][vid];[ovrl]setsar=1[ovrl_fixed];[vid][ovrl_fixed]overlay=0:0:format=auto');
+      
+      cmd.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '23', '-preset', 'ultrafast');
     } else {
-      cmd.push('-c', 'copy');
+      cmd.push('-c:v', 'copy');
     }
+
+    cmd.push('-c:a', 'copy');
 
     if (needDate && date) cmd.push('-metadata', `creation_time=${date.toISOString()}`);
     if (needLoc) {
@@ -1242,30 +1243,19 @@ async function processVideoWithFFmpeg(mainFile, overlayFile, needDate, needLoc, 
       const lon = meta.longitude >= 0 ? `+${meta.longitude.toFixed(4)}` : `${meta.longitude.toFixed(4)}`;
       cmd.push('-metadata', `location=${lat}${lon}/`);
     }
+
     cmd.push(outName);
 
     const exitCode = await ffmpeg.exec(cmd);
-    if (exitCode !== 0) {
-      const logText = errorLogBuffer.join('\n');
-      if (logText.includes('Invalid data found') || logText.includes('moov atom not found')) {
-        throw new Error(t('corruptVideo'));
-      }
-      throw new Error(t('ffmpegError', { code: exitCode }));
-    }
+    if (exitCode !== 0) throw new Error(`FFmpeg Fehler: ${exitCode}`);
 
     const data = await ffmpeg.readFile(outName);
-    return new File([data.buffer], mainFile.name, { type: mainFile.type });
+    return new File([data.buffer], mainFile.name, { type: 'video/mp4' });
 
   } finally {
-    ffmpeg.off('log', logHandler);
-    const files = await ffmpeg.listDir('/'); 
-    try {
-        for (const file of files) {
-            if (!file.isDir) await ffmpeg.deleteFile(file.name);
-        }
-    } catch (e) {
-    console.error(`${currentLanguage === 'de' ? 'Fehler beim Löschen von' : 'Error deleting'} ${f} ${currentLanguage === 'de' ? 'aus virtuellem FS' : 'from virtual FS'}:`, e);
-    }
+    await ffmpeg.deleteFile(mainName).catch(() => {});
+    if (overlayFile) await ffmpeg.deleteFile(overlayName).catch(() => {});
+    await ffmpeg.deleteFile(outName).catch(() => {});
   }
 }
 
