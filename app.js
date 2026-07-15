@@ -89,9 +89,19 @@ const i18n = {
     // Success messages
     jsonParsed: '{count} entries parsed from JSON',
     ffmpegReady: 'Video processing files buffered.',
+    ffmpegLoading: '⏳ Loading video processing engine (buffering files)... Please wait.',
     jsonFound: 'memories_history.json found',
     jsonMissing: 'memories_history.json missing',
     mediaFound: 'media files found',
+    scanFolderZero: '⏳ Scanning folder... (0 files found)',
+    readingFilesFound: '⏳ Reading files... ({count} found)',
+    filesFoundText: '{count} files found...',
+    noMediaFiles: '❌ No media files found',
+    errorReadingFolder: '❌ Error reading folder: {msg}',
+    multipleExportsMerged: '✨ Multiple exports merged ({sourceText})',
+    jsonFoundHtml: '✅ memories_history.json found',
+    jsonMissingHtml: '❌ memories_history.json missing',
+    mediaFilesFoundHtml: '✅ {count} media files found',
   },
   de: {
     // UI Labels
@@ -177,9 +187,19 @@ const i18n = {
     // Success messages
     jsonParsed: '{count} Einträge aus JSON geparst',
     ffmpegReady: 'Videoverarbeitungs-Dateien gepuffert.',
+    ffmpegLoading: '⏳ Lade Videoverarbeitungs-Engine (Dateien puffern)... Bitte warten.',
     jsonFound: 'memories_history.json gefunden',
     jsonMissing: 'memories_history.json fehlt',
     mediaFound: 'Mediadateien gefunden',
+    scanFolderZero: '⏳ Scanne Ordner... (0 Dateien gefunden)',
+    readingFilesFound: '⏳ Lese Dateien... ({count} gefunden)',
+    filesFoundText: '{count} Dateien gefunden...',
+    noMediaFiles: '❌ Keine Mediadateien gefunden',
+    errorReadingFolder: '❌ Fehler beim Lesen des Ordners: {msg}',
+    multipleExportsMerged: '✨ Mehrere Exports zusammengefügt ({sourceText})',
+    jsonFoundHtml: '✅ memories_history.json gefunden',
+    jsonMissingHtml: '❌ memories_history.json fehlt',
+    mediaFilesFoundHtml: '✅ {count} Mediadateien gefunden',
   },
 };
 
@@ -496,13 +516,13 @@ async function handleFolderDrop(e) {
   let scannedCount = 0;
   
   folderList.classList.remove('file-list--empty');
-  folderList.innerHTML = `<div class="file-item"><span class="file-item__name">⏳ Scanne Ordner... (0 Dateien gefunden)</span></div>`;
+  folderList.innerHTML = `<div class="file-item"><span class="file-item__name">${t('scanFolderZero')}</span></div>`;
   
   // Use existing progress bar for scanning
   progressSection.classList.add('progress-section--visible');
   progressFill.style.width = '100%';
   progressFill.style.transition = 'none';
-  progressText.textContent = `Scanne Verzeichnis...`;
+  progressText.textContent = t('scanningDir');
   
   const filesToScan = [];
 
@@ -513,8 +533,8 @@ async function handleFolderDrop(e) {
       filesToScan.push(file);
       scannedCount++;
       if (scannedCount % 500 === 0) {
-        folderList.innerHTML = `<div class="file-item"><span class="file-item__name">⏳ Lese Dateien... (${scannedCount} gefunden)</span></div>`;
-        progressText.textContent = `${scannedCount} Dateien gefunden...`;
+        folderList.innerHTML = `<div class="file-item"><span class="file-item__name">${t('readingFilesFound', { count: scannedCount })}</span></div>`;
+        progressText.textContent = t('filesFoundText', { count: scannedCount });
       }
     } else if (entry.isDirectory) {
       const dirReader = entry.createReader();
@@ -550,7 +570,8 @@ async function handleFolderDrop(e) {
     await scanFiles(filesToScan);
     statusLog = [];
   } catch (err) {
-    addLog(`${currentLanguage === 'de' ? '❌ Fehler beim Lesen des Ordners: ' : '❌ Error reading folder: '} + ${err.message}`, 'error');
+    console.error(err);
+    addLog(t('errorReadingFolder', { msg: err.message }), 'error');
   } finally {
     isScanning = false;
     progressSection.classList.remove('progress-section--visible');
@@ -577,7 +598,7 @@ async function scanFiles(filesArray) {
       jsonFiles.push(file);
       if (!jsonFile) {
         jsonFile = file;
-        uploadSources.push('json');
+        uploadSources.push({ name: 'json' });
       }
     } else {
       const ext = name.split('.').pop();
@@ -591,8 +612,8 @@ async function scanFiles(filesArray) {
   }
   
   // Track if memories folder was found (for multi-ZIP support)
-  if (foundMemoriesDir && !uploadSources.includes('memories')) {
-    uploadSources.push('memories');
+  if (foundMemoriesDir && !uploadSources.some(s => s.name === 'memories')) {
+    uploadSources.push({ name: 'memories' });
   }
   
   mediaFiles = Array.from(mediaMap.values());
@@ -612,21 +633,21 @@ function updateUI() {
     
     // Show multi-ZIP merge info
     if (uploadSources.length > 1) {
-      const sourceText = uploadSources.join(' + ');
-      folderList.innerHTML += `<div class="file-item"><span class="file-item__name" style="color: #34c759;">✨ ${currentLanguage === 'de' ? 'Mehrere Exports zusammengefügt' : 'Multiple exports merged'} (${sourceText})</span></div>`;
+      const sourceText = uploadSources.map(s => s.name).join(', ');
+      folderList.innerHTML += `<div class="file-item"><span class="file-item__name" style="color: #34c759;">${t('multipleExportsMerged', { sourceText })}</span></div>`;
     }
     
     if (jsonFile) {
-        folderList.innerHTML += `<div class="file-item"><span class="file-item__name">${currentLanguage === 'de' ? '✅ memories_history.json gefunden' : '✅ memories_history.json found'}</span><span class="file-item__size">${formatBytes(jsonFile.size)}</span></div>`;
+        folderList.innerHTML += `<div class="file-item"><span class="file-item__name">${t('jsonFoundHtml')}</span><span class="file-item__size">${formatBytes(jsonFile.size)}</span></div>`;
     } else {
-        folderList.innerHTML += `<div class="file-item"><span class="file-item__name" style="color: var(--c-error)">${currentLanguage === 'de' ? '❌ memories_history.json fehlt' : '❌ memories_history.json missing'}</span></div>`;
+        folderList.innerHTML += `<div class="file-item"><span class="file-item__name" style="color: var(--c-error)">${t('jsonMissingHtml')}</span></div>`;
     }
     
     if (mediaFiles.length > 0) {
         const totalSize = mediaFiles.reduce((sum, file) => sum + file.size, 0);
-        folderList.innerHTML += `<div class="file-item"><span class="file-item__name">✅ ${mediaFiles.length} ${currentLanguage === 'de' ? 'Mediadateien gefunden' : 'media files found'}</span><span class="file-item__size">${formatBytes(totalSize)}</span></div>`;
+        folderList.innerHTML += `<div class="file-item"><span class="file-item__name">${t('mediaFilesFoundHtml', { count: mediaFiles.length })}</span><span class="file-item__size">${formatBytes(totalSize)}</span></div>`;
     } else {
-        folderList.innerHTML += `<div class="file-item"><span class="file-item__name" style="color: var(--c-error)">❌ Keine Mediadateien gefunden</span></div>`;
+        folderList.innerHTML += `<div class="file-item"><span class="file-item__name" style="color: var(--c-error)">${t('noMediaFiles')}</span></div>`;
     }
   }
 
@@ -1233,7 +1254,7 @@ let ffmpegBlobs = null;
 async function getFFmpegBlobs() {
   if (ffmpegBlobs) return ffmpegBlobs;
   
-  addLog('⏳ Lade Videoverarbeitungs-Engine (Dateien puffern)... Bitte warten.');
+  addLog(t('ffmpegLoading'));
 
   try {
     const { toBlobURL } = window.FFmpegUtil;
@@ -1243,7 +1264,7 @@ async function getFFmpegBlobs() {
     const workerBlobURL = await toBlobURL('vendor/814.ffmpeg.js', 'text/javascript');
     
     ffmpegBlobs = { coreBlobURL, wasmBlobURL, workerBlobURL };
-    addLog('✅ Videoverarbeitungs-Dateien gepuffert.', 'ok');
+    addLog(`✅ ${t('ffmpegReady')}`, 'ok');
     return ffmpegBlobs;
   } catch (e) {
     addLog('❌ FFmpeg-Pufferfehler: ' + e.message, 'error');
@@ -1527,9 +1548,9 @@ function degToDms(deg) {
 
 /**
  * Add log message
- * @param {string} msg - Die Nachricht
+ * @param {string} msg - message
  * @param {string} type - 'info', 'ok' oder 'error'
- * @param {string|null} id - Wenn übergeben, überschreibt dies einen bereits existierenden Log-Eintrag mit derselben ID
+ * @param {string|null} id - If provided, this will overwrite an existing log entry with the same ID
  */
 function addLog(msg, type = 'info', id = null) {
   if (id) {
