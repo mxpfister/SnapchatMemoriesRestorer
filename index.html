@@ -425,6 +425,43 @@
         ::-webkit-scrollbar-thumb:hover {
             background: var(--c-muted); 
         }
+
+        /* Processing Banner */
+        .processing-banner {
+            background: var(--c-success);
+            color: white;
+            padding: 0.75rem 1.25rem;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+
+        .processing-dot {
+            width: 10px;
+            height: 10px;
+            background: white;
+            border-radius: 50%;
+            flex-shrink: 0;
+            animation: blink 1.5s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .progress-bar__fill--processing {
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
     </style>
     <script src="coi-serviceworker.js"></script>
 </head>
@@ -498,6 +535,12 @@
                 <div class="card-icon">⚡️</div>
                 <h2>2. Processing</h2>
                 <p>Files are matched and metadata (date & GPS) are written to photos. You get a complete ZIP archive.</p>
+
+                <div id="processingBanner" class="processing-banner" hidden>
+                    <span class="processing-dot"></span>
+                    <span id="processingBannerText">Processing active — please keep this tab open</span>
+                    <span id="elapsedTime" style="margin-left: auto; font-variant-numeric: tabular-nums;"></span>
+                </div>
 
                 <div class="progress-section" id="progressSection" role="region" aria-label="Fortschritt">
                     <div class="progress-bar">

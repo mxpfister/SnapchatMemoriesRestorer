@@ -83,6 +83,8 @@ const i18n = {
     ffmpegError: 'FFmpeg error code {code}',
     corruptVideo: 'Video file is corrupted/unreadable',
     processingVideo: 'Processing video {name} ({percent}%)',
+    ffmpegTimeout: 'Video processing timed out for {name}. Original will be preserved.',
+    fileEmptyHint: '💡 The ZIP file will be filled after processing completes. Please do not open it before.',
     
     // Success messages
     jsonParsed: '{count} entries parsed from JSON',
@@ -169,6 +171,8 @@ const i18n = {
     ffmpegError: 'FFmpeg Fehler Code {code}',
     corruptVideo: 'Video-Datei ist korrupt/unlesbar',
     processingVideo: 'Verarbeite Video {name} ({percent}%)',
+    ffmpegTimeout: 'Zeitüberschreitung bei der Videoverarbeitung von {name}. Original wird beibehalten.',
+    fileEmptyHint: '💡 Die ZIP-Datei wird erst nach Abschluss der Verarbeitung gefüllt. Bitte nicht vorher öffnen.',
     
     // Success messages
     jsonParsed: '{count} Einträge aus JSON geparst',
@@ -198,6 +202,137 @@ let isScanning = false;
 let isAborted = false;
 let uploadSources = [];
 let wakeLockSentinel = null;
+let processingStartTime = null;
+
+/**
+ * Prevent accidental tab closure during processing
+ */
+function preventClose(e) {
+  e.preventDefault();
+  e.returnValue = '';
+}
+
+// ─── CRC32 for Streaming ZIP Writer ───
+const crc32Table = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) {
+      c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    table[i] = c;
+  }
+  return table;
+})();
+
+function crc32(data) {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < data.length; i++) {
+    crc = crc32Table[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+/**
+ * Streaming ZIP writer - writes entries directly to a WritableStream.
+ * Only keeps one file in memory at a time. Uses STORE (no compression).
+ */
+class StreamingZipWriter {
+  constructor(writable) {
+    this.writable = writable;
+    this.entries = [];
+    this.offset = 0;
+  }
+
+  async addFile(name, data, lastModified) {
+    const encoder = new TextEncoder();
+    const nameBytes = encoder.encode(name);
+    const fileData = data instanceof ArrayBuffer ? new Uint8Array(data) : new Uint8Array(data);
+    const fileCrc = crc32(fileData);
+    const size = fileData.byteLength;
+
+    const d = lastModified || new Date();
+    const dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    const dosDate = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+
+    // Local file header (30 bytes + filename)
+    const header = new ArrayBuffer(30 + nameBytes.length);
+    const hv = new DataView(header);
+    hv.setUint32(0, 0x04034b50, true);
+    hv.setUint16(4, 20, true);
+    hv.setUint16(6, 0, true);
+    hv.setUint16(8, 0, true);
+    hv.setUint16(10, dosTime, true);
+    hv.setUint16(12, dosDate, true);
+    hv.setUint32(14, fileCrc, true);
+    hv.setUint32(18, size, true);
+    hv.setUint32(22, size, true);
+    hv.setUint16(26, nameBytes.length, true);
+    hv.setUint16(28, 0, true);
+    new Uint8Array(header).set(nameBytes, 30);
+
+    const entryOffset = this.offset;
+
+    await this.writable.write(new Uint8Array(header));
+    this.offset += header.byteLength;
+
+    // Write file data in 4MB chunks
+    const WRITE_CHUNK = 4 * 1024 * 1024;
+    for (let i = 0; i < fileData.byteLength; i += WRITE_CHUNK) {
+      const chunk = fileData.subarray(i, Math.min(i + WRITE_CHUNK, fileData.byteLength));
+      await this.writable.write(chunk);
+    }
+    this.offset += size;
+
+    this.entries.push({ name: nameBytes, size, crc: fileCrc, offset: entryOffset, dosTime, dosDate });
+  }
+
+  async finalize() {
+    const centralDirOffset = this.offset;
+
+    for (const entry of this.entries) {
+      const cd = new ArrayBuffer(46 + entry.name.length);
+      const cv = new DataView(cd);
+      cv.setUint32(0, 0x02014b50, true);
+      cv.setUint16(4, 20, true);
+      cv.setUint16(6, 20, true);
+      cv.setUint16(8, 0, true);
+      cv.setUint16(10, 0, true);
+      cv.setUint16(12, entry.dosTime, true);
+      cv.setUint16(14, entry.dosDate, true);
+      cv.setUint32(16, entry.crc, true);
+      cv.setUint32(20, entry.size, true);
+      cv.setUint32(24, entry.size, true);
+      cv.setUint16(28, entry.name.length, true);
+      cv.setUint16(30, 0, true);
+      cv.setUint16(32, 0, true);
+      cv.setUint16(34, 0, true);
+      cv.setUint16(36, 0, true);
+      cv.setUint32(38, 0, true);
+      cv.setUint32(42, entry.offset, true);
+      new Uint8Array(cd).set(entry.name, 46);
+
+      await this.writable.write(new Uint8Array(cd));
+      this.offset += cd.byteLength;
+    }
+
+    const centralDirSize = this.offset - centralDirOffset;
+
+    const eocd = new ArrayBuffer(22);
+    const ev = new DataView(eocd);
+    ev.setUint32(0, 0x06054b50, true);
+    ev.setUint16(4, 0, true);
+    ev.setUint16(6, 0, true);
+    ev.setUint16(8, this.entries.length, true);
+    ev.setUint16(10, this.entries.length, true);
+    ev.setUint32(12, centralDirSize, true);
+    ev.setUint32(16, centralDirOffset, true);
+    ev.setUint16(20, 0, true);
+
+    await this.writable.write(new Uint8Array(eocd));
+    await this.writable.close();
+  }
+}
 
 // DOM Elements
 const folderZone = document.getElementById('folderZone');
@@ -710,6 +845,28 @@ async function handleProcess() {
   progressSection.classList.add('progress-section--visible');
   processBtn.disabled = true;
   
+  // UX: Prevent accidental tab close
+  window.addEventListener('beforeunload', preventClose);
+  
+  // UX: Show processing banner with elapsed timer
+  const processingBanner = document.getElementById('processingBanner');
+  const elapsedTimeEl = document.getElementById('elapsedTime');
+  const processingBannerText = document.getElementById('processingBannerText');
+  if (processingBanner) processingBanner.hidden = false;
+  if (processingBannerText) {
+    processingBannerText.textContent = currentLanguage === 'de'
+      ? 'Verarbeitung aktiv \u2014 bitte diesen Tab geöffnet lassen'
+      : 'Processing active \u2014 please keep this tab open';
+  }
+  processingStartTime = Date.now();
+  const timerInterval = setInterval(() => {
+    const elapsed = Date.now() - processingStartTime;
+    const mins = Math.floor(elapsed / 60000);
+    const secs = Math.floor((elapsed % 60000) / 1000);
+    if (elapsedTimeEl) elapsedTimeEl.textContent = `\u23f1\ufe0f ${mins}:${secs.toString().padStart(2, '0')}`;
+  }, 1000);
+  progressFill.classList.add('progress-bar__fill--processing');
+  
   await requestWakeLock();
   
   let writableStream = null;
@@ -726,10 +883,17 @@ async function handleProcess() {
       });
       writableStream = await fileHandle.createWritable();
       addLog(t('filePickerSet'), 'ok');
+      addLog(t('fileEmptyHint'), 'warn');
     } catch (e) {
       if (e.name === 'AbortError') {
         progressSection.classList.remove('progress-section--visible');
         processBtn.disabled = false;
+        window.removeEventListener('beforeunload', preventClose);
+        if (processingBanner) processingBanner.hidden = true;
+        clearInterval(timerInterval);
+        progressFill.classList.remove('progress-bar__fill--processing');
+        processingStartTime = null;
+        document.title = 'Snapchat Memories Restorer';
         return;
       }
       addLog(t('uploadHint'), 'warn');
@@ -756,7 +920,7 @@ async function handleProcess() {
       }
       mediaMap.get(info.mid)[info.type] = { file, info };
     }
-    addLog(`📁 ${t('indexComplete')}`);
+    addLog(`\ud83d\udcc1 ${t('indexComplete')}`);
     mediaFiles = [];
 
     const allGroups = Array.from(mediaMap.entries());
@@ -777,13 +941,29 @@ async function handleProcess() {
     const totalToProcess = allGroups.length;
 
     if (writableStream) {
+      // ─── Streaming path: write each file directly to disk ───
+      const zipWriter = new StreamingZipWriter(writableStream);
+
       if (imageGroups.length > 0) {
         addLog(t('processingImages'));
-        await asyncPool(imageGroups, async ([mid, files]) => {
-          await processAndZip(mid, files, zip, history);
+        for (const [mid, files] of imageGroups) {
+          if (isAborted) break;
+          const meta = history[mid];
+          const mainFile = files.main;
+          try {
+            const processedBuffer = await processMediaGroup(files, meta);
+            const filename = `${mainFile.info.prefix}_${mid}.${mainFile.info.ext}`;
+            const fileDate = meta ? parseSnapchatDate(meta.dateRaw) : null;
+            await zipWriter.addFile(filename, processedBuffer, fileDate);
+          } catch (e) {
+            addLog(t('errorProcessing', { file: mainFile.file ? mainFile.file.name : mid, msg: e.message }), 'error');
+          } finally {
+            if (files.main.file) files.main.file = null;
+            if (files.overlay && files.overlay.file) files.overlay.file = null;
+          }
           globalProcessed++;
           updateProgress(globalProcessed, totalToProcess);
-        }, 4);
+        }
       }
 
       if (videoGroups.length > 0) {
@@ -804,49 +984,34 @@ async function handleProcess() {
             }
 
             const [mid, files] = group;
-            await processAndZip(mid, files, zip, history);
+            const meta = history[mid];
+            const mainFile = files.main;
+            try {
+              const processedBuffer = await processMediaGroup(files, meta);
+              const filename = `${mainFile.info.prefix}_${mid}.${mainFile.info.ext}`;
+              const fileDate = meta ? parseSnapchatDate(meta.dateRaw) : null;
+              await zipWriter.addFile(filename, processedBuffer, fileDate);
+            } catch (e) {
+              addLog(t('errorProcessing', { file: mainFile.file ? mainFile.file.name : mid, msg: e.message }), 'error');
+            } finally {
+              if (files.main.file) files.main.file = null;
+              if (files.overlay && files.overlay.file) files.overlay.file = null;
+            }
             
             globalProcessed++;
             updateProgress(globalProcessed, totalToProcess);
             videoCounter++;
         }
-    }
+      }
 
       statusLog = statusLog.filter(item => item.id !== 'current_video');
       updateStatus();
 
       addLog(t('streamingFiles'), 'ok');
-      
-      const zipStream = zip.generateInternalStream({ 
-        type: 'uint8array',
-        compression: 'STORE',
-        streamFiles: true 
-      });
-
-      await new Promise((resolve, reject) => {
-        zipStream.on('data', async (data, metadata) => {
-          zipStream.pause();
-          try {
-            await writableStream.write(data);
-            updateProgress(metadata.percent, 100);
-            zipStream.resume();
-          } catch(e) {
-            reject(e);
-          }
-        })
-        .on('error', (err) => reject(err))
-        .on('end', async () => {
-          try {
-            await writableStream.close();
-            resolve();
-          } catch(e) {
-            reject(e);
-          }
-        });
-      });
-
+      await zipWriter.finalize();
       addLog(t('fileSaved'), 'ok');
     } else {
+      // ─── Fallback path: chunked in-memory download (unchanged) ───
       const TARGET_CHUNK_BYTES = 1500 * 1000 * 1000; // ~1,5 GB
       const memoryChunks = [];
       let currentChunk = [];
@@ -953,6 +1118,14 @@ async function handleProcess() {
     }
   } finally {
     await releaseWakeLock();
+    window.removeEventListener('beforeunload', preventClose);
+    
+    // UX: Hide processing banner, stop timer, reset title
+    if (processingBanner) processingBanner.hidden = true;
+    clearInterval(timerInterval);
+    progressFill.classList.remove('progress-bar__fill--processing');
+    processingStartTime = null;
+    document.title = 'Snapchat Memories Restorer';
     
     if (ffmpegInstance) {
       try {
@@ -1207,6 +1380,21 @@ async function processMediaGroup(files, meta) {
 }
 
 /**
+ * Calculate dynamic timeout for FFmpeg video processing
+ */
+function getVideoTimeout(fileSize, hasOverlay) {
+  const baseSec = 60;
+  const sizeMB = fileSize / (1024 * 1024);
+  if (hasOverlay) {
+    // Re-encode with libx264: ~20 sec per MB in WASM
+    return Math.max(baseSec, sizeMB * 20) * 1000;
+  } else {
+    // Stream copy (metadata only): ~2 sec per MB
+    return Math.max(baseSec, sizeMB * 2) * 1000;
+  }
+}
+
+/**
  * Handle video manipulation with FFmpeg 
  */
 async function processVideoWithFFmpeg(mainFile, overlayFile, needDate, needLoc, date, meta) {
@@ -1223,8 +1411,9 @@ async function processVideoWithFFmpeg(mainFile, overlayFile, needDate, needLoc, 
     await ffmpeg.writeFile(mainName, await fetchFile(mainFile));
 
     let cmd = ['-y', '-i', mainName];
+    const hasOverlay = !!overlayFile;
 
-    if (overlayFile) {
+    if (hasOverlay) {
       await ffmpeg.writeFile(overlayName, await fetchFile(overlayFile));
       cmd.push('-i', overlayName);
       
@@ -1246,16 +1435,34 @@ async function processVideoWithFFmpeg(mainFile, overlayFile, needDate, needLoc, 
 
     cmd.push(outName);
 
-    const exitCode = await ffmpeg.exec(cmd);
-    if (exitCode !== 0) throw new Error(`FFmpeg Fehler: ${exitCode}`);
+    // Execute with dynamic timeout to prevent hanging on corrupt videos
+    const timeoutMs = getVideoTimeout(mainFile.size, hasOverlay);
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error(t('ffmpegTimeout', { name: mainFile.name }))), timeoutMs);
+    });
+
+    const exitCode = await Promise.race([ffmpeg.exec(cmd), timeoutPromise]);
+    clearTimeout(timeoutId);
+    if (exitCode !== 0) throw new Error(t('ffmpegError', { code: exitCode }));
 
     const data = await ffmpeg.readFile(outName);
     return new File([data.buffer], mainFile.name, { type: 'video/mp4' });
 
+  } catch (err) {
+    // On timeout or error, terminate FFmpeg for clean restart with next video
+    if (ffmpegInstance) {
+      try { ffmpegInstance.terminate(); } catch(e) {}
+      ffmpegInstance = null;
+    }
+    throw err;
   } finally {
-    await ffmpeg.deleteFile(mainName).catch(() => {});
-    if (overlayFile) await ffmpeg.deleteFile(overlayName).catch(() => {});
-    await ffmpeg.deleteFile(outName).catch(() => {});
+    // Only cleanup if ffmpeg instance is still alive
+    if (ffmpegInstance) {
+      await ffmpeg.deleteFile(mainName).catch(() => {});
+      if (overlayFile) await ffmpeg.deleteFile(overlayName).catch(() => {});
+      await ffmpeg.deleteFile(outName).catch(() => {});
+    }
   }
 }
 
@@ -1403,7 +1610,24 @@ function updateProgress(current, total) {
   progressFill.setAttribute('aria-valuemin', '0');
   progressFill.setAttribute('aria-valuemax', '100');
   progressFill.setAttribute('aria-valuenow', percent);
-  progressText.textContent = `${percent}%`;
+  
+  // Show estimated time remaining
+  let progressStr = `${percent}%`;
+  if (processingStartTime && current > 0 && current < total) {
+    const elapsed = Date.now() - processingStartTime;
+    const avgTimePerItem = elapsed / current;
+    const remaining = avgTimePerItem * (total - current);
+    const remainingMins = Math.ceil(remaining / 60000);
+    if (remainingMins > 0) {
+      progressStr += currentLanguage === 'de'
+        ? ` \u2014 ~${remainingMins} Min. verbleibend`
+        : ` \u2014 ~${remainingMins} min remaining`;
+    }
+  }
+  progressText.textContent = progressStr;
+  
+  // Update tab title with progress
+  document.title = `(${percent}%) ${currentLanguage === 'de' ? 'Verarbeitung...' : 'Processing...'} \u2014 Memories Restorer`;
 }
 
 /**
