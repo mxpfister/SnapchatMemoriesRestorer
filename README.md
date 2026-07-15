@@ -31,7 +31,9 @@ This tool acts as a bridge between the messy Snapchat export and your clean phot
 This project runs entirely on the client side using Vanilla JavaScript and WebAssembly. 
 * **Video Processing:** Powered by `ffmpeg.wasm` (using `coi-serviceworker` to bypass CORS/SharedArrayBuffer restrictions on static hosts like GitHub Pages).
 * **Image & EXIF Manipulation:** Utilizes Canvas API, `piexif.js`, and `exifr`.
-* **Archiving:** Uses `JSZip` to bundle the processed files directly in the browser.
+* **Archiving:** 
+  * **Primary (Modern Browsers):** A custom, memory-efficient `StreamingZipWriter` that streams ZIP packages directly to your local storage via the **File System Access API** (`showSaveFilePicker`), minimizing RAM overhead.
+  * **Fallback (Safari/Firefox):** Uses **`JSZip`** to bundle and download the processed files in memory (automatically split into ~1.5GB chunks to prevent browser crashes).
 
 ## 📄 License & Privacy
 This is a client-side only tool. Your data never leaves your device.
