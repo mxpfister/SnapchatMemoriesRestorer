@@ -102,6 +102,7 @@ const i18n = {
     jsonFoundHtml: '✅ memories_history.json found',
     jsonMissingHtml: '❌ memories_history.json missing',
     mediaFilesFoundHtml: '✅ {count} media files found',
+    invalidFolder: '❌ Invalid folder: No Snapchat export files found',
   },
   de: {
     // UI Labels
@@ -200,6 +201,7 @@ const i18n = {
     jsonFoundHtml: '✅ memories_history.json gefunden',
     jsonMissingHtml: '❌ memories_history.json fehlt',
     mediaFilesFoundHtml: '✅ {count} Mediadateien gefunden',
+    invalidFolder: '❌ Ungültiger Ordner: Keine Snapchat-Exportdateien gefunden',
   },
 };
 
@@ -627,7 +629,9 @@ function updateUI() {
   folderList.innerHTML = '';
   
   if (!jsonFile && mediaFiles.length === 0) {
-    folderList.classList.add('file-list--empty');
+    folderList.classList.remove('file-list--empty');
+    folderList.innerHTML = `<div class="file-item"><span class="file-item__name" style="color: var(--c-error)">${t('invalidFolder')}</span></div>`;
+    console.warn('Invalid folder selected: No JSON and no media files found.');
   } else {
     folderList.classList.remove('file-list--empty');
     
