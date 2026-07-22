@@ -103,6 +103,7 @@ const i18n = {
     jsonMissingHtml: '❌ memories_history.json missing',
     mediaFilesFoundHtml: '✅ {count} media files found',
     invalidFolder: '❌ Invalid folder: No Snapchat export files found',
+    skippedOrphanedOverlay: '⚠️ Skipped orphaned overlay without main file: {name}',
   },
   de: {
     // UI Labels
@@ -202,6 +203,7 @@ const i18n = {
     jsonMissingHtml: '❌ memories_history.json fehlt',
     mediaFilesFoundHtml: '✅ {count} Mediadateien gefunden',
     invalidFolder: '❌ Ungültiger Ordner: Keine Snapchat-Exportdateien gefunden',
+    skippedOrphanedOverlay: '⚠️ Overlay ohne zugehörige Hauptdatei übersprungen: {name}',
   },
 };
 
@@ -949,13 +951,23 @@ async function handleProcess() {
     mediaFiles = [];
 
     const allGroups = Array.from(mediaMap.entries());
+
+    // Filter out groups without a main file (e.g. orphaned overlays from split exports)
+    const validGroups = allGroups.filter(([mid, files]) => {
+      if (!files.main) {
+        const overlayName = files.overlay?.file?.name || mid;
+        addLog(t('skippedOrphanedOverlay', { name: overlayName }), 'warn');
+        return false;
+      }
+      return true;
+    });
     
-    const imageGroups = allGroups.filter(([_, files]) => {
+    const imageGroups = validGroups.filter(([_, files]) => {
       const ext = files.main.info.ext.toLowerCase();
       return IMAGE_EXTENSIONS.has(ext);
     });
     
-    const videoGroups = allGroups.filter(([_, files]) => {
+    const videoGroups = validGroups.filter(([_, files]) => {
       const ext = files.main.info.ext.toLowerCase();
       return VIDEO_EXTENSIONS.has(ext);
     });
@@ -963,7 +975,7 @@ async function handleProcess() {
     addLog(t('found', { images: imageGroups.length, videos: videoGroups.length }), 'ok');
     
     let globalProcessed = 0;
-    const totalToProcess = allGroups.length;
+    const totalToProcess = validGroups.length;
 
     if (writableStream) {
       // ─── Streaming path: write each file directly to disk ───
@@ -1042,7 +1054,7 @@ async function handleProcess() {
       let currentChunk = [];
       let currentChunkSize = 0;
 
-      for (const group of allGroups) {
+      for (const group of validGroups) {
         const [mid, ObjectFiles] = group;
         let size = ObjectFiles.main.file.size;
         if (ObjectFiles.overlay) {
@@ -1248,7 +1260,7 @@ function extractMediaInfo(filename) {
   return {
     prefix: match[1],
     mid: match[2].toLowerCase(),
-    type: match[3],
+    type: match[3].toLowerCase(),
     ext: match[4].toLowerCase(),
   };
 }
