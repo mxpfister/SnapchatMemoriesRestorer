@@ -10,5 +10,6 @@ Thumbs.db
 
 # Snapchat Data (local testing)
 mydata*/
+memories/
 *.zip
 !snapchat-memories.zip
