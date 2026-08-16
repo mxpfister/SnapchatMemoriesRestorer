@@ -1527,7 +1527,12 @@ async function processVideoWithFFmpeg(mainFile, overlayFile, needDate, needLoc, 
 
     cmd.push('-c:a', 'copy');
 
-    if (needDate && date) cmd.push('-metadata', `creation_time=${date.toISOString()}`);
+    if (needDate && date) {
+      const isoDate = date.toISOString();
+      cmd.push('-metadata', `creation_time=${isoDate}`);
+      cmd.push('-metadata:s:v:0', `creation_time=${isoDate}`);
+      cmd.push('-movflags', '+faststart+use_metadata_tags');
+    }
     if (needLoc) {
       const lat = meta.latitude >= 0 ? `+${meta.latitude.toFixed(4)}` : `${meta.latitude.toFixed(4)}`;
       const lon = meta.longitude >= 0 ? `+${meta.longitude.toFixed(4)}` : `${meta.longitude.toFixed(4)}`;
@@ -1583,18 +1588,19 @@ async function applyPiexif(fileBlob, meta, needDate, needLoc, date) {
     }
     
     if (needDate && date) {
+      const pad = n => ('0' + n).slice(-2);
       const dateStr =
-        date.toISOString().split('T')[0].replace(/-/g, ':') +
-        ' ' +
-        ('0' + date.getHours()).slice(-2) +
-        ':' +
-        ('0' + date.getMinutes()).slice(-2) +
-        ':' +
-        ('0' + date.getSeconds()).slice(-2);
+        date.getUTCFullYear() + ':' +
+        pad(date.getUTCMonth() + 1) + ':' +
+        pad(date.getUTCDate()) + ' ' +
+        pad(date.getUTCHours()) + ':' +
+        pad(date.getUTCMinutes()) + ':' +
+        pad(date.getUTCSeconds());
       exifStr['0th'][piexif.ImageIFD.DateTime] = dateStr;
-      
+
       if (!exifStr['Exif']) exifStr['Exif'] = {};
       exifStr['Exif'][piexif.ExifIFD.DateTimeOriginal] = dateStr;
+      exifStr['Exif'][piexif.ExifIFD.DateTimeDigitized] = dateStr;
     }
 
     if (needLoc && meta.latitude !== null && meta.longitude !== null) {
