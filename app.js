@@ -1448,7 +1448,7 @@ async function processMediaGroup(files, meta) {
   const ext = mainFile.name.split('.').pop().toLowerCase();
   const isVideo = VIDEO_EXTENSIONS.has(ext);
 
-  const { needDate, needLoc, date } = await getMissingMetadata(mainFile, meta);
+  let { needDate, needLoc, date } = await getMissingMetadata(mainFile, meta);
   const needsOverlay = !!overlayFile;
 
   let currentFile = mainFile;
@@ -1467,6 +1467,11 @@ async function processMediaGroup(files, meta) {
 
   if (!isVideo && needsOverlay && IMAGE_EXTENSIONS.has(ext)) {
     currentFile = await mergeImageOverlay(mainFile, overlayFile);
+    // Canvas merge strips ALL EXIF data, so force re-application of metadata
+    if (meta) {
+      if (date) needDate = true;
+      if (meta.latitude !== null && meta.longitude !== null) needLoc = true;
+    }
   }
 
   if (!isVideo && IMAGE_EXTENSIONS.has(ext)) {
@@ -1573,52 +1578,196 @@ async function processVideoWithFFmpeg(mainFile, overlayFile, needDate, needLoc, 
 }
 
 /**
- * Add EXIF data to image using piexif
+ * Build EXIF metadata dict with date and GPS information.
+ */
+function buildExifDict(meta, needDate, needLoc, date) {
+  const exifDict = { '0th': {}, 'Exif': {}, 'GPS': {}, '1st': {}, 'Interop': {} };
+
+  if (needDate && date) {
+    const pad = n => ('0' + n).slice(-2);
+    const dateStr =
+      date.getUTCFullYear() + ':' +
+      pad(date.getUTCMonth() + 1) + ':' +
+      pad(date.getUTCDate()) + ' ' +
+      pad(date.getUTCHours()) + ':' +
+      pad(date.getUTCMinutes()) + ':' +
+      pad(date.getUTCSeconds());
+    exifDict['0th'][piexif.ImageIFD.DateTime] = dateStr;
+    exifDict['Exif'][piexif.ExifIFD.DateTimeOriginal] = dateStr;
+    exifDict['Exif'][piexif.ExifIFD.DateTimeDigitized] = dateStr;
+  }
+
+  if (needLoc && meta && meta.latitude !== null && meta.longitude !== null) {
+    exifDict['GPS'][piexif.GPSIFD.GPSLatitude] = degToDms(Math.abs(meta.latitude));
+    exifDict['GPS'][piexif.GPSIFD.GPSLongitude] = degToDms(Math.abs(meta.longitude));
+    exifDict['GPS'][piexif.GPSIFD.GPSLatitudeRef] = meta.latitude >= 0 ? 'N' : 'S';
+    exifDict['GPS'][piexif.GPSIFD.GPSLongitudeRef] = meta.longitude >= 0 ? 'E' : 'W';
+  }
+
+  return exifDict;
+}
+
+/**
+ * Binary-level EXIF injection into JPEG.
+ * Fallback for canvas-generated JPEGs where piexif.insert() may silently
+ * produce invalid EXIF due to JFIF/APP0 marker conflicts.
+ * Strips existing APP0 (JFIF) and APP1 (EXIF) segments, then injects
+ * a clean APP1/EXIF segment directly after the SOI marker.
+ * @param {ArrayBuffer} jpegBuffer - Raw JPEG data
+ * @param {string} exifDumpStr - Binary string from piexif.dump()
+ * @returns {ArrayBuffer|null} - New JPEG with EXIF, or null on failure
+ */
+function insertExifBinary(jpegBuffer, exifDumpStr) {
+  const jpeg = new Uint8Array(jpegBuffer);
+
+  // Verify SOI marker (FF D8)
+  if (jpeg.length < 4 || jpeg[0] !== 0xFF || jpeg[1] !== 0xD8) {
+    return null;
+  }
+
+  // Convert piexif.dump() binary string to byte array
+  const exifPayload = new Uint8Array(exifDumpStr.length);
+  for (let i = 0; i < exifDumpStr.length; i++) {
+    exifPayload[i] = exifDumpStr.charCodeAt(i) & 0xFF;
+  }
+
+  // Walk JPEG markers after SOI and skip APP0 (JFIF) + APP1 (existing EXIF)
+  let restOffset = 2;
+  while (restOffset < jpeg.length - 3) {
+    if (jpeg[restOffset] !== 0xFF) break;
+    const marker = jpeg[restOffset + 1];
+    // Stop at SOS or any non-APPn marker
+    if (marker === 0xDA || (marker & 0xF0) !== 0xE0) break;
+    const segLen = (jpeg[restOffset + 2] << 8) | jpeg[restOffset + 3];
+    // Strip APP0 (JFIF) and APP1 (EXIF) to avoid conflicts
+    if (marker === 0xE0 || marker === 0xE1) {
+      restOffset += 2 + segLen;
+    } else {
+      break; // Keep other APPn segments (e.g. APP2/ICC profiles)
+    }
+  }
+
+  // Build APP1 segment: FF E1 + length(2 bytes big-endian) + EXIF payload
+  const app1ContentLen = exifPayload.length + 2; // +2 for the length field itself
+  if (app1ContentLen > 0xFFFF) return null; // Too large for single APP1 segment
+
+  const app1Header = new Uint8Array(4);
+  app1Header[0] = 0xFF;
+  app1Header[1] = 0xE1;
+  app1Header[2] = (app1ContentLen >> 8) & 0xFF;
+  app1Header[3] = app1ContentLen & 0xFF;
+
+  // Assemble: SOI + new APP1 + remaining original JPEG data
+  const rest = jpeg.subarray(restOffset);
+  const result = new Uint8Array(2 + app1Header.length + exifPayload.length + rest.length);
+  result[0] = 0xFF;
+  result[1] = 0xD8;
+  result.set(app1Header, 2);
+  result.set(exifPayload, 6);
+  result.set(rest, 6 + exifPayload.length);
+
+  return result.buffer;
+}
+
+/**
+ * Verify that EXIF date was correctly embedded in a JPEG buffer.
+ * Uses exifr to independently parse and check for DateTimeOriginal.
+ */
+async function verifyExifDate(buffer) {
+  try {
+    const parsed = await exifr.parse(buffer, { tiff: true, exif: true });
+    return !!(parsed && (parsed.DateTimeOriginal || parsed.CreateDate));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Add EXIF data to a JPEG image using piexif, with binary-level fallback.
+ *
+ * Canvas-generated JPEGs (from overlay merging) often have JFIF (APP0)
+ * headers that can conflict with EXIF (APP1) insertion via piexif.
+ * This function tries piexif first, verifies the result with exifr,
+ * and falls back to direct binary EXIF injection if verification fails.
  */
 async function applyPiexif(fileBlob, meta, needDate, needLoc, date) {
   if (!needDate && !needLoc) return await fileBlob.arrayBuffer();
-  
-  try {
-    const dataUrl = await getBase64DataUrl(fileBlob);
-    let exifStr;
-    try {
-      exifStr = piexif.load(dataUrl);
-    } catch(e) {
-      exifStr = { '0th': {}, 'Exif': {}, 'GPS': {}, '1st': {}, 'Interop': {} };
-    }
-    
-    if (needDate && date) {
-      const pad = n => ('0' + n).slice(-2);
-      const dateStr =
-        date.getUTCFullYear() + ':' +
-        pad(date.getUTCMonth() + 1) + ':' +
-        pad(date.getUTCDate()) + ' ' +
-        pad(date.getUTCHours()) + ':' +
-        pad(date.getUTCMinutes()) + ':' +
-        pad(date.getUTCSeconds());
-      exifStr['0th'][piexif.ImageIFD.DateTime] = dateStr;
 
-      if (!exifStr['Exif']) exifStr['Exif'] = {};
-      exifStr['Exif'][piexif.ExifIFD.DateTimeOriginal] = dateStr;
-      exifStr['Exif'][piexif.ExifIFD.DateTimeDigitized] = dateStr;
-    }
-
-    if (needLoc && meta.latitude !== null && meta.longitude !== null) {
-      if (!exifStr['GPS']) exifStr['GPS'] = {};
-      exifStr['GPS'][piexif.GPSIFD.GPSLatitude] = degToDms(Math.abs(meta.latitude));
-      exifStr['GPS'][piexif.GPSIFD.GPSLongitude] = degToDms(Math.abs(meta.longitude));
-      exifStr['GPS'][piexif.GPSIFD.GPSLatitudeRef] = meta.latitude >= 0 ? 'N' : 'S';
-      exifStr['GPS'][piexif.GPSIFD.GPSLongitudeRef] = meta.longitude >= 0 ? 'E' : 'W';
-    }
-
-    const exifBytes = piexif.dump(exifStr);
-    const newDataUrl = piexif.insert(exifBytes, dataUrl);
-    
-    return await dataUrlToArrayBuffer(newDataUrl);
-  } catch (e) {
-    console.warn('EXIF-Fehler, mache weiter ohne EXIF:', e);
+  // piexif only supports JPEG – skip for PNG, HEIC, WebP etc.
+  const blobType = fileBlob.type || '';
+  const fileName = fileBlob.name || '';
+  const ext = fileName.split('.').pop().toLowerCase();
+  const isJpeg = blobType.includes('jpeg') || blobType.includes('jpg') ||
+                 ext === 'jpg' || ext === 'jpeg';
+  if (!isJpeg) {
     return await fileBlob.arrayBuffer();
   }
+
+  const exifDict = buildExifDict(meta, needDate, needLoc, date);
+  let exifBytes;
+  try {
+    exifBytes = piexif.dump(exifDict);
+  } catch (e) {
+    console.warn('piexif.dump() failed:', e);
+    return await fileBlob.arrayBuffer();
+  }
+
+  // ── Attempt 1: Standard piexif path ──
+  try {
+    const dataUrl = await getBase64DataUrl(fileBlob);
+
+    // Merge new metadata into any existing EXIF
+    let finalExifBytes;
+    try {
+      const existing = piexif.load(dataUrl);
+      const merged = {
+        '0th':     { ...(existing['0th']     || {}), ...(exifDict['0th']  || {}) },
+        'Exif':    { ...(existing['Exif']    || {}), ...(exifDict['Exif'] || {}) },
+        'GPS':     { ...(existing['GPS']     || {}), ...(exifDict['GPS']  || {}) },
+        '1st':     existing['1st']     || {},
+        'Interop': existing['Interop'] || {},
+      };
+      finalExifBytes = piexif.dump(merged);
+    } catch {
+      finalExifBytes = exifBytes;
+    }
+
+    const newDataUrl = piexif.insert(finalExifBytes, dataUrl);
+    const resultBuffer = await dataUrlToArrayBuffer(newDataUrl);
+
+    // Verify the EXIF date is actually readable
+    if (needDate && date) {
+      const verified = await verifyExifDate(resultBuffer);
+      if (verified) return resultBuffer;
+      console.warn('EXIF verification failed after piexif.insert – trying binary fallback');
+    } else {
+      return resultBuffer;
+    }
+  } catch (e) {
+    console.warn('piexif.insert() failed:', e, '– trying binary fallback');
+  }
+
+  // ── Attempt 2: Binary-level EXIF injection ──
+  // Strips JFIF/APP0 and existing APP1, then injects a clean EXIF APP1 segment
+  try {
+    const rawBuffer = await fileBlob.arrayBuffer();
+    const result = insertExifBinary(rawBuffer, exifBytes);
+    if (result) {
+      if (needDate && date) {
+        const verified = await verifyExifDate(result);
+        if (verified) return result;
+        console.warn('EXIF verification also failed after binary fallback');
+      } else {
+        return result;
+      }
+    }
+  } catch (e) {
+    console.warn('Binary EXIF fallback failed:', e);
+  }
+
+  // ── Final fallback: return image without EXIF metadata ──
+  addLog('⚠️ EXIF metadata could not be embedded in an image – date may be incorrect in gallery apps', 'warn');
+  return await fileBlob.arrayBuffer();
 }
 
 /**
