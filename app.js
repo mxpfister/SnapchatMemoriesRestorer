@@ -1049,7 +1049,7 @@ async function handleProcess() {
         addLog(t('processingImages'));
         for (const [mid, files] of imageGroups) {
           if (isAborted) break;
-          const meta = history[mid];
+          const meta = resolveMetadata(mid, files, history);
           const mainFile = files.main;
           try {
             const processedBuffer = await processMediaGroup(files, meta);
@@ -1085,7 +1085,7 @@ async function handleProcess() {
             }
 
             const [mid, files] = group;
-            const meta = history[mid];
+            const meta = resolveMetadata(mid, files, history);
             const mainFile = files.main;
             try {
               const processedBuffer = await processMediaGroup(files, meta);
@@ -1251,25 +1251,35 @@ async function parseJsonHistory() {
     const text = await jsonFile.text();
     const data = JSON.parse(text);
     const items = data['Saved Media'] || [];
-    const result = {};
+    
+    const byMid = {};
+    const byTime = {};
 
     for (const item of items) {
-      let mid = parseMidFromUrl(item['Download Link'] || '');
-      if (!mid) mid = parseMidFromUrl(item['Media Download Url'] || '');
-      if (!mid) continue;
-
       const location = item['Location'];
       const [lat, lon] = parseLocation(location);
-
-      result[mid] = {
+      
+      const meta = {
         dateRaw: item['Date'],
         latitude: lat,
         longitude: lon,
       };
+
+      let mid = parseMidFromUrl(item['Download Link'] || '');
+      if (!mid) mid = parseMidFromUrl(item['Media Download Url'] || '');
+      
+      if (mid) {
+        byMid[mid] = meta;
+      }
+      
+      const dateObj = parseSnapchatDate(item['Date']);
+      if (dateObj) {
+        byTime[dateObj.getTime()] = meta;
+      }
     }
 
-    addLog(t('jsonParsed', { count: Object.keys(result).length }), 'ok');
-    return result;
+    addLog(t('jsonParsed', { count: items.length }), 'ok');
+    return { byMid, byTime };
   } catch (e) {
     addLog(t('jsonParseError', { msg: e.message }), 'error');
     throw e;
@@ -1288,6 +1298,33 @@ function parseMidFromUrl(url) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Find the metadata for a media group using its MID or File Last Modified Time as fallback.
+ */
+function resolveMetadata(mid, files, history) {
+  if (history.byMid[mid]) {
+    return history.byMid[mid];
+  }
+  
+  // Fallback: match by timestamp
+  const mainFile = files.main.file;
+  if (!mainFile || !mainFile.lastModified) return null;
+  
+  const fileTime = mainFile.lastModified;
+  let closestMeta = null;
+  let minDiff = Infinity;
+  
+  for (const [timeStr, meta] of Object.entries(history.byTime)) {
+    const diff = Math.abs(Number(timeStr) - fileTime);
+    if (diff < 5000 && diff < minDiff) { // Match within 5 seconds tolerance
+      minDiff = diff;
+      closestMeta = meta;
+    }
+  }
+  
+  return closestMeta;
 }
 
 /**
@@ -1802,7 +1839,7 @@ function addLog(msg, type = 'info', id = null) {
 }
 
 async function processAndZip(mid, files, zip, history) {
-  const meta = history[mid];
+  const meta = resolveMetadata(mid, files, history);
   const mainFile = files.main;
   
   let processedFile = null;
