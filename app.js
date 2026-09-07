@@ -999,7 +999,10 @@ async function handleProcess() {
 
   try {
     const history = await parseJsonHistory();
-    const zip = new JSZip();
+
+    // Auto-detect timezone offset BEFORE indexing
+    const tzOffsetMs = detectTimezoneOffset(mediaFiles, history);
+
     const mediaMap = new Map();
 
     for (const file of mediaFiles) {
@@ -1049,7 +1052,7 @@ async function handleProcess() {
         addLog(t('processingImages'));
         for (const [mid, files] of imageGroups) {
           if (isAborted) break;
-          const meta = resolveMetadata(mid, files, history);
+          const meta = resolveMetadata(mid, files, history, tzOffsetMs);
           const mainFile = files.main;
           try {
             const processedBuffer = await processMediaGroup(files, meta);
@@ -1085,7 +1088,7 @@ async function handleProcess() {
             }
 
             const [mid, files] = group;
-            const meta = resolveMetadata(mid, files, history);
+            const meta = resolveMetadata(mid, files, history, tzOffsetMs);
             const mainFile = files.main;
             try {
               const processedBuffer = await processMediaGroup(files, meta);
@@ -1155,7 +1158,7 @@ async function handleProcess() {
         if (cImages.length > 0) {
           addLog(t('processingImagesPart', { part: partNumber, total: totalParts }));
           await asyncPool(cImages, async ([mid, files]) => {
-            await processAndZip(mid, files, chunkZip, history);
+            await processAndZip(mid, files, chunkZip, history, tzOffsetMs);
             globalProcessed++;
             updateProgress(globalProcessed, totalToProcess);
           }, 2);
@@ -1179,7 +1182,7 @@ async function handleProcess() {
                 }
 
                 const [mid, files] = group;
-                await processAndZip(mid, files, chunkZip, history);
+                await processAndZip(mid, files, chunkZip, history, tzOffsetMs);
                 
                 globalProcessed++;
                 updateProgress(globalProcessed, totalToProcess);
@@ -1301,30 +1304,122 @@ function parseMidFromUrl(url) {
 }
 
 /**
- * Find the metadata for a media group using its MID or File Last Modified Time as fallback.
+     * Auto-detect the timezone offset between file timestamps and JSON dates.
+     *
+     * ZIP archives store timestamps in DOS format (local time, no timezone info).
+     * When the OS extracts the ZIP, it applies the system's current UTC offset,
+     * which can differ from the offset in the JSON (always UTC).
+     * This function detects that shift by sampling files and comparing their
+     * lastModified to same-day JSON entries. Works for any timezone (UTC-12
+     * to UTC+14, including 30/45-minute offsets) and is DST-safe.
+     *
+     * @param {File[]} sampleFiles - Array of media File objects (from the upload)
+     * @param {{byTime: Object, byDay?: Object}} history - Parsed JSON history
+     * @returns {number} Detected offset in milliseconds (add to file.lastModified to get UTC)
+     */
+    function detectTimezoneOffset(sampleFiles, history) {
+      // Build day → [epoch_ms] lookup from JSON dates
+      const dayToJsonTimes = {};
+      for (const [epochMs, meta] of Object.entries(history.byTime)) {
+        const match = (meta.dateRaw || '').match(/^(\d{4}-\d{2}-\d{2})/);
+        if (match) {
+          const day = match[1];
+          if (!dayToJsonTimes[day]) dayToJsonTimes[day] = [];
+          dayToJsonTimes[day].push(Number(epochMs));
+        }
+      }
+    
+      // Sample up to 30 main files
+      const sample = sampleFiles
+        .filter(f => f.name.includes('-main.'))
+        .slice(0, 30);
+    
+      const diffs = [];
+    
+      for (const file of sample) {
+        const info = extractMediaInfo(file.name);
+        if (!info) continue;
+    
+        // Only compare to JSON entries from the SAME day (filename prefix)
+        const jsonTimes = dayToJsonTimes[info.prefix];
+        if (!jsonTimes || jsonTimes.length === 0) continue;
+    
+        const fileTime = file.lastModified;
+        let closestDiff = Infinity;
+        for (const jt of jsonTimes) {
+          const d = jt - fileTime;
+          if (Math.abs(d) < Math.abs(closestDiff)) closestDiff = d;
+        }
+    
+        // Sanity: offset must be within ±15 hours (covers all real timezones)
+        if (Math.abs(closestDiff) < 15 * 3600 * 1000) {
+          diffs.push(closestDiff);
+        }
+      }
+    
+      if (diffs.length === 0) return 0;
+    
+      // Round to nearest 15 minutes and pick the most common value (mode)
+      const ROUND_MS = 15 * 60 * 1000;
+      const freq = {};
+      for (const d of diffs) {
+        const rounded = Math.round(d / ROUND_MS) * ROUND_MS;
+        freq[rounded] = (freq[rounded] || 0) + 1;
+      }
+    
+      let bestOffset = 0;
+      let bestCount = 0;
+      for (const [offset, count] of Object.entries(freq)) {
+        if (count > bestCount) {
+          bestCount = count;
+          bestOffset = Number(offset);
+        }
+      }
+    
+      console.log(`Timezone auto-detection: offset=${bestOffset / 3600000}h (${bestCount}/${diffs.length} agree)`);
+      return bestOffset;
+    }
+
+
+/**
+ * Find metadata for a media group.
+ * @param {number} tzOffsetMs - Pre-detected timezone offset from detectTimezoneOffset()
  */
-function resolveMetadata(mid, files, history) {
+function resolveMetadata(mid, files, history, tzOffsetMs) {
+  // 1. Direct MID match (when download links aren't empty)
   if (history.byMid[mid]) {
     return history.byMid[mid];
   }
-  
-  // Fallback: match by timestamp
+
+  // 2. Timestamp match with auto-detected timezone compensation
   const mainFile = files.main.file;
-  if (!mainFile || !mainFile.lastModified) return null;
-  
-  const fileTime = mainFile.lastModified;
-  let closestMeta = null;
-  let minDiff = Infinity;
-  
-  for (const [timeStr, meta] of Object.entries(history.byTime)) {
-    const diff = Math.abs(Number(timeStr) - fileTime);
-    if (diff < 5000 && diff < minDiff) { // Match within 5 seconds tolerance
-      minDiff = diff;
-      closestMeta = meta;
+  if (mainFile && mainFile.lastModified) {
+    const adjustedTime = mainFile.lastModified + tzOffsetMs;
+
+    let closestMeta = null;
+    let minDiff = Infinity;
+
+    for (const [timeStr, meta] of Object.entries(history.byTime)) {
+      const diff = Math.abs(Number(timeStr) - adjustedTime);
+      if (diff < 5000 && diff < minDiff) {
+        minDiff = diff;
+        closestMeta = meta;
+      }
     }
+    if (closestMeta) return closestMeta;
   }
-  
-  return closestMeta;
+
+  // 3. Ultimate fallback: date from filename prefix
+  const prefix = files.main.info.prefix;
+  if (prefix) {
+    return {
+      dateRaw: `${prefix} 12:00:00 UTC`,
+      latitude: null,
+      longitude: null,
+    };
+  }
+
+  return null;
 }
 
 /**
@@ -1341,15 +1436,15 @@ function parseLocation(location) {
 }
 
 /**
- * Parse Snapchat date format
+ * Parse Snapchat date format.
+ * Returns null if the string is empty or produces an invalid Date.
+ * Note: new Date() never throws – it returns an Invalid Date object,
+ * so we must validate with isNaN() instead of try/catch.
  */
 function parseSnapchatDate(dateStr) {
   if (!dateStr) return null;
-  try {
-    return new Date(dateStr.replace(' UTC', ' GMT'));
-  } catch {
-    return null;
-  }
+  const d = new Date(dateStr.replace(' UTC', ' GMT'));
+  return isNaN(d.getTime()) ? null : d;
 }
 
 /**
@@ -1838,8 +1933,8 @@ function addLog(msg, type = 'info', id = null) {
   updateStatus();
 }
 
-async function processAndZip(mid, files, zip, history) {
-  const meta = resolveMetadata(mid, files, history);
+async function processAndZip(mid, files, zip, history, tzOffsetMs) {
+  const meta = resolveMetadata(mid, files, history, tzOffsetMs);
   const mainFile = files.main;
   
   let processedFile = null;

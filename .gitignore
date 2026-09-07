@@ -13,3 +13,4 @@ mydata*/
 memories/
 *.zip
 !snapchat-memories.zip
+/snapchat-export-*
