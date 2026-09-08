@@ -7,8 +7,17 @@ export /**
  */
 function parseSnapchatDate(dateStr) {
   if (!dateStr) return null;
-  const d = new Date(dateStr.replace(' UTC', ' GMT'));
-  return isNaN(d.getTime()) ? null : d;
+  // Convert "YYYY-MM-DD HH:MM:SS UTC" to ISO 8601 "YYYY-MM-DDTHH:MM:SSZ"
+  let isoStr = dateStr.replace(' ', 'T').replace(' UTC', 'Z');
+  const d = new Date(isoStr);
+  
+  if (!isNaN(d.getTime())) {
+    return d;
+  }
+  
+  // Fallback for Safari if the string format is unexpected (replace dashes with slashes)
+  const fallbackDate = new Date(dateStr.replace(/-/g, '/').replace(' UTC', ' GMT'));
+  return isNaN(fallbackDate.getTime()) ? null : fallbackDate;
 }
 
 export /**
