@@ -4,7 +4,7 @@ import { getProcessingStartTime, getCurrentLanguage } from '../state.js';
  * Update progress bar
  */
 export function updateProgress(current, total) {
-  const percent = Math.round((current / total) * 100);
+  const percent = total === 0 ? 0 : Math.round((current / total) * 100);
   document.getElementById('progressFill').style.width = percent + '%';
   document.getElementById('progressFill').setAttribute('aria-valuemin', '0');
   document.getElementById('progressFill').setAttribute('aria-valuemax', '100');

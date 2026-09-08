@@ -334,7 +334,7 @@ async function handleProcess() {
     }
 
   } catch (e) {
-    if (e.message && e.message.includes('Vorgang abgebrochen')) {
+    if (getIsAborted()) {
       addLog(t('abortedByUser'), 'warn');
     } else {
       addLog(t('criticalError', { msg: e.message }), 'error');

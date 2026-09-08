@@ -135,7 +135,7 @@ async function getFFmpegBlobs() {
     addLog(`✅ ${t('ffmpegReady')}`, 'ok');
     return { coreBlobURL, wasmBlobURL, workerBlobURL };
   } catch (e) {
-    addLog('❌ FFmpeg-Pufferfehler: ' + e.message, 'error');
+    addLog(`❌ ${t('ffmpegBufferError', { msg: e.message })}`, 'error');
     console.error("FFmpeg Buffer Error:", e);
     throw e;
   }

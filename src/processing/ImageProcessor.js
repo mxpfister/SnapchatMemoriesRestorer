@@ -9,6 +9,10 @@ export async function mergeImageOverlay(mainFile, overlayFile) {
   return new Promise((resolve, reject) => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      resolve(mainFile);
+      return;
+    }
     
     const mainImg = new Image();
     const overlayImg = new Image();
@@ -25,6 +29,10 @@ export async function mergeImageOverlay(mainFile, overlayFile) {
         canvas.toBlob((blob) => {
             canvas.width = 0;
             canvas.height = 0;
+            if (!blob) {
+              resolve(mainFile);
+              return;
+            }
             resolve(new File([blob], mainFile.name, { type: 'image/jpeg' }));
         }, 'image/jpeg', 0.95);
       };
@@ -45,6 +53,8 @@ async function getBase64DataUrl(fileBlob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.onabort = reject;
     reader.readAsDataURL(fileBlob);
   });
 }

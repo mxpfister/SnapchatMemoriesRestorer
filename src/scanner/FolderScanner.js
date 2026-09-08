@@ -53,12 +53,14 @@ export async function handleFolderDrop(e) {
   // Recursive function to read directory entries
   async function readEntry(entry) {
     if (entry.isFile) {
-      const file = await new Promise(resolve => entry.file(resolve));
-      filesToScan.push(file);
-      scannedCount++;
-      if (scannedCount % 500 === 0) {
-        folderList.innerHTML = `<div class="file-item"><span class="file-item__name">${t('readingFilesFound', { count: scannedCount })}</span></div>`;
-        progressText.textContent = t('filesFoundText', { count: scannedCount });
+      const file = await new Promise(resolve => entry.file(resolve, () => resolve(null)));
+      if (file) {
+        filesToScan.push(file);
+        scannedCount++;
+        if (scannedCount % 500 === 0) {
+          folderList.innerHTML = `<div class="file-item"><span class="file-item__name">${t('readingFilesFound', { count: scannedCount })}</span></div>`;
+          progressText.textContent = t('filesFoundText', { count: scannedCount });
+        }
       }
     } else if (entry.isDirectory) {
       const dirReader = entry.createReader();
@@ -82,8 +84,11 @@ export async function handleFolderDrop(e) {
             const entry = item.webkitGetAsEntry();
             if (entry) await readEntry(entry);
         } else if (item.kind === 'file') {
-            filesToScan.push(item.getAsFile());
-            scannedCount++;
+            const file = item.getAsFile();
+            if (file) {
+                filesToScan.push(file);
+                scannedCount++;
+            }
         }
     }
     
@@ -109,13 +114,14 @@ export async function handleFolderDrop(e) {
 export async function scanFiles(filesArray) {
   const mediaMap = new Map();
   const jsonFiles = [];
-  const foundMemoriesDir = filesArray.some(f => f.webkitRelativePath?.includes('memories/'));
+  const foundMemoriesDir = filesArray.some(f => f?.webkitRelativePath?.includes('memories/'));
   
   for (let f of getMediaFiles()) {
       mediaMap.set(f.name + '_' + f.size, f);
   }
   
   for (let file of filesArray) {
+    if (!file) continue;
     const name = file.name.toLowerCase();
     
     if (name === 'memories_history.json') {
