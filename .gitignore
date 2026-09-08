@@ -14,3 +14,7 @@ mydata*/
 memories/
 *.zip
 /snapchat-export-*
+
+# Node
+node_modules/
+coverage/
