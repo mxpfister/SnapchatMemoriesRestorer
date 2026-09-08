@@ -89,12 +89,13 @@ export async function processMediaGroup(files, meta) {
 export async function processAndZip(mid, files, zip, history, tzOffsetMs) {
   const meta = resolveMetadata(mid, files, history, tzOffsetMs);
   const mainFile = files.main;
+  const fileDate = meta ? parseSnapchatDate(meta.dateRaw) : null;
   
   let processedFile = null;
   try {
     processedFile = await processMediaGroup(files, meta);
     const filename = `${mainFile.info.prefix}_${mid}.${mainFile.info.ext}`;
-    zip.file(filename, processedFile, { compression: "STORE" });
+    zip.file(filename, processedFile, { compression: "STORE", date: fileDate || new Date() });
   } catch (e) {
     addLog(t('errorProcessing', { file: mainFile.file.name, msg: e.message }), 'error');
   } finally {
