@@ -2,10 +2,10 @@ import { getJsonFile, getMediaFiles, getUploadSources, getStatusLog, setStatusLo
 import { formatBytes, escapeHtml } from '../utils/formatting.js';
 import { t } from '../i18n.js';
 
-export /**
+/**
  * Update UI based on current state
  */
-function updateUI() {
+export function updateUI() {
   document.getElementById('folderList').innerHTML = '';
   
   if (!getJsonFile() && getMediaFiles().length === 0) {
@@ -38,10 +38,10 @@ function updateUI() {
   document.getElementById('processBtn').disabled = !getJsonFile() || getMediaFiles().length === 0;
 }
 
-export /**
+/**
  * Update status display
  */
-function updateStatus() {
+export function updateStatus() {
   const html = getStatusLog()
     .map((entry) => {
       let className = '';
@@ -55,10 +55,10 @@ function updateStatus() {
   document.getElementById('statusBox').scrollTop = document.getElementById('statusBox').scrollHeight;
 }
 
-export /**
+/**
  * @param {string|null} id - If provided, this will overwrite an existing log entry with the same ID
  */
-function addLog(msg, type = 'info', id = null) {
+export function addLog(msg, type = 'info', id = null) {
   if (id) {
     const existingIndex = getStatusLog().findIndex(item => item.id === id);
     if (existingIndex !== -1) {

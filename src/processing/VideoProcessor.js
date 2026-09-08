@@ -26,7 +26,7 @@ export async function getFFmpeg() {
   return ffmpeg;
 }
 
-export /**
+/**
  * Calculate dynamic timeout for FFmpeg video processing
  */
 function getVideoTimeout(fileSize, hasOverlay) {
@@ -41,10 +41,10 @@ function getVideoTimeout(fileSize, hasOverlay) {
   }
 }
 
-export /**
+/**
  * Handle video manipulation with FFmpeg 
  */
-async function processVideoWithFFmpeg(mainFile, overlayFile, needDate, needLoc, date, meta) {
+export async function processVideoWithFFmpeg(mainFile, overlayFile, needDate, needLoc, date, meta) {
   const ffmpeg = await getFFmpeg();
   const { fetchFile } = window.FFmpegUtil;
 

@@ -1,8 +1,8 @@
 
-export /**
+/**
  * Format bytes to human readable
  */
-function formatBytes(bytes) {
+export function formatBytes(bytes) {
   if (bytes === 0) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];
@@ -10,10 +10,10 @@ function formatBytes(bytes) {
   return (Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]);
 }
 
-export /**
+/**
  * Escape HTML to prevent XSS
  */
-function escapeHtml(text) {
+export function escapeHtml(text) {
   const map = {
     '&': '&amp;',
     '<': '&lt;',

@@ -30,10 +30,10 @@ export async function getMissingMetadata(file, meta) {
   };
 }
 
-export /**
+/**
  * Process media files (Overlay & EXIF data)
  */
-async function processMediaGroup(files, meta) {
+export async function processMediaGroup(files, meta) {
   const mid = files.main.info.mid;
   try {
     const cached = await getFromCache(mid);

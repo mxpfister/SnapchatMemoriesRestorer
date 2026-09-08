@@ -2,10 +2,10 @@ import { addLog } from '../ui/UIController.js';
 import { t } from '../i18n.js';
 import { degToDms } from '../utils/date.js';
 
-export /**
+/**
  * Merge two images using Canvas (instant, no FFmpeg required)
  */
-async function mergeImageOverlay(mainFile, overlayFile) {
+export async function mergeImageOverlay(mainFile, overlayFile) {
   return new Promise((resolve, reject) => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
@@ -38,7 +38,7 @@ async function mergeImageOverlay(mainFile, overlayFile) {
   });
 }
 
-export /**
+/**
  * Get base64 Data URL for piexif
  */
 async function getBase64DataUrl(fileBlob) {
@@ -49,7 +49,7 @@ async function getBase64DataUrl(fileBlob) {
   });
 }
 
-export /**
+/**
  * Fallback to blob for ArrayBuffer response
  */
 async function dataUrlToArrayBuffer(dataUrl) {
@@ -57,7 +57,7 @@ async function dataUrlToArrayBuffer(dataUrl) {
   return await res.arrayBuffer();
 }
 
-export /**
+/**
  * Build EXIF metadata dict with date and GPS information.
  */
 function buildExifDict(meta, needDate, needLoc, date) {
@@ -87,7 +87,7 @@ function buildExifDict(meta, needDate, needLoc, date) {
   return exifDict;
 }
 
-export /**
+/**
  * Binary-level EXIF injection into JPEG.
  * Fallback for canvas-generated JPEGs where piexif.insert() may silently
  * produce invalid EXIF due to JFIF/APP0 marker conflicts.
@@ -149,7 +149,7 @@ function insertExifBinary(jpegBuffer, exifDumpStr) {
   return result.buffer;
 }
 
-export /**
+/**
  * Verify that EXIF date was correctly embedded in a JPEG buffer.
  * Uses exifr to independently parse and check for DateTimeOriginal.
  */

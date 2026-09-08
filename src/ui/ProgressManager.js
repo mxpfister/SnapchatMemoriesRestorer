@@ -1,9 +1,9 @@
 import { getProcessingStartTime, getCurrentLanguage } from '../state.js';
 
-export /**
+/**
  * Update progress bar
  */
-function updateProgress(current, total) {
+export function updateProgress(current, total) {
   const percent = Math.round((current / total) * 100);
   document.getElementById('progressFill').style.width = percent + '%';
   document.getElementById('progressFill').setAttribute('aria-valuemin', '0');

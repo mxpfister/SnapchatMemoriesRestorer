@@ -1,11 +1,11 @@
 
-export /**
+/**
  * Parse Snapchat date format.
  * Returns null if the string is empty or produces an invalid Date.
  * Note: new Date() never throws – it returns an Invalid Date object,
  * so we must validate with isNaN() instead of try/catch.
  */
-function parseSnapchatDate(dateStr) {
+export function parseSnapchatDate(dateStr) {
   if (!dateStr) return null;
   // Convert "YYYY-MM-DD HH:MM:SS UTC" to ISO 8601 "YYYY-MM-DDTHH:MM:SSZ"
   let isoStr = dateStr.replace(' ', 'T').replace(' UTC', 'Z');
@@ -20,10 +20,10 @@ function parseSnapchatDate(dateStr) {
   return isNaN(fallbackDate.getTime()) ? null : fallbackDate;
 }
 
-export /**
+/**
  * Convert degrees to DMS format for EXIF
  */
-function degToDms(deg) {
+export function degToDms(deg) {
   const d = Math.floor(Math.abs(deg));
   const mf = (Math.abs(deg) - d) * 60;
   const m = Math.floor(mf);

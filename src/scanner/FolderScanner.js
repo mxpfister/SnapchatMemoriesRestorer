@@ -3,27 +3,27 @@ import { updateUI, addLog } from '../ui/UIController.js';
 import { t } from '../i18n.js';
 import { IMAGE_EXTENSIONS, VIDEO_EXTENSIONS } from '../constants.js';
 
-export /**
+/**
  * Handle drag over event
  */
-function handleDragOver(e) {
+export function handleDragOver(e) {
   e.preventDefault();
   e.currentTarget.classList.add('dragover');
 }
 
-export /**
+/**
  * Handle drag leave event
  */
-function handleDragLeave(e) {
+export function handleDragLeave(e) {
   if (e.currentTarget === e.target) {
     e.currentTarget.classList.remove('dragover');
   }
 }
 
-export /**
+/**
  * Handle folder/file drop
  */
-async function handleFolderDrop(e) {
+export async function handleFolderDrop(e) {
   e.preventDefault();
   e.currentTarget.classList.remove('dragover');
   
@@ -103,10 +103,10 @@ async function handleFolderDrop(e) {
   }
 }
 
-export /**
+/**
  * Scan gathered files and sort them into JSON or Media
  */
-async function scanFiles(filesArray) {
+export async function scanFiles(filesArray) {
   const mediaMap = new Map();
   const jsonFiles = [];
   const foundMemoriesDir = filesArray.some(f => f.webkitRelativePath?.includes('memories/'));

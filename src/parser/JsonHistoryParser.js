@@ -3,10 +3,10 @@ import { addLog } from '../ui/UIController.js';
 import { t } from '../i18n.js';
 import { parseSnapchatDate } from '../utils/date.js';
 
-export /**
+/**
  * Parse JSON history file
  */
-async function parseJsonHistory() {
+export async function parseJsonHistory() {
   try {
     const text = await getJsonFile().text();
     const data = JSON.parse(text);
@@ -46,10 +46,10 @@ async function parseJsonHistory() {
   }
 }
 
-export /**
+/**
  * Parse MID from URL
  */
-function parseMidFromUrl(url) {
+export function parseMidFromUrl(url) {
   if (!url) return null;
   try {
     const urlObj = new URL(url);
@@ -60,10 +60,10 @@ function parseMidFromUrl(url) {
   }
 }
 
-export /**
+/**
  * Parse location from string
  */
-function parseLocation(location) {
+export function parseLocation(location) {
   if (!location) return [null, null];
   const match = location.match(/Latitude, Longitude:\s*([-+]?\d+(?:\.\d+)?),\s*([-+]?\d+(?:\.\d+)?)/);
   if (!match) return [null, null];
@@ -73,10 +73,10 @@ function parseLocation(location) {
   return [lat, lon];
 }
 
-export /**
+/**
  * Extract media info from filename
  */
-function extractMediaInfo(filename) {
+export function extractMediaInfo(filename) {
   const match = filename.match(/^(\d{4}-\d{2}-\d{2})_([a-fA-F0-9-]{36})-(main|overlay)\.([^.]+)$/i);
   if (!match) return null;
   return {
